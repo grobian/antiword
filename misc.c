@@ -1,9 +1,9 @@
 /*
  * misc.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2003 A.J. van Os; Released under GNU GPL
  *
  * Description:
- * System calls & misc. functions
+ * Miscellaneous functions
  */
 
 #include <stdio.h>
@@ -18,98 +18,17 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#if defined(__dos)
+#endif /* __riscos */
+#if defined(__dos) && !defined(__MINGW32__)
 #define S_ISDIR(x)	(((x) & S_IFMT) == S_IFDIR)
 #define S_ISREG(x)	(((x) & S_IFMT) == S_IFREG)
 #endif /* __dos */
-#endif /* __riscos */
 #include "antiword.h"
+#if defined(__vms)
+#include <unixlib.h>
+#endif
 
-
-#if defined(__riscos)
-/*
- * iGetFiletype
- * This procedure will get the filetype of the given file.
- * returns the filetype.
- */
-int
-iGetFiletype(const char *szFilename)
-{
-	_kernel_swi_regs	regs;
-	_kernel_oserror		*e;
-
-	fail(szFilename == NULL || szFilename[0] == '\0');
-
-	(void)memset((void *)&regs, 0, sizeof(regs));
-	regs.r[0] = 23;
-	regs.r[1] = (int)szFilename;
-	e = _kernel_swi(OS_File, &regs, &regs);
-	if (e == NULL) {
-		return regs.r[6];
-	}
-	werr(0, "Get Filetype error %d: %s", e->errnum, e->errmess);
-	return -1;
-} /* end of iGetFiletype */
-
-/*
- * vSetFiletype
- * This procedure will set the filetype of the given file to the given
- * type.
- */
-void
-vSetFiletype(const char *szFilename, int iFiletype)
-{
-	_kernel_swi_regs	regs;
-	_kernel_oserror		*e;
-
-	fail(szFilename == NULL || szFilename[0] == '\0');
-
-	if (iFiletype < 0x000 || iFiletype > 0xfff) {
-		return;
-	}
-	(void)memset((void *)&regs, 0, sizeof(regs));
-	regs.r[0] = 18;
-	regs.r[1] = (int)szFilename;
-	regs.r[2] = iFiletype;
-	e = _kernel_swi(OS_File, &regs, &regs);
-	if (e != NULL) {
-		switch (e->errnum) {
-		case 0x000113:	/* ROM */
-		case 0x0104e1:	/* Read-only floppy DOSFS */
-		case 0x0108c9:	/* Read-only floppy ADFS */
-		case 0x013803:	/* Read-only ArcFS */
-		case 0x80344a:	/* CD-ROM */
-			break;
-		default:
-			werr(0, "Set Filetype error %d: %s",
-				e->errnum, e->errmess);
-			break;
-		}
-	}
-} /* end of vSetFileType */
-
-/*
- * bISO_8859_1_IsCurrent
- * This function checks whether ISO_8859_1 (aka Latin1) is the current
- * character set.
- */
-BOOL
-bISO_8859_1_IsCurrent(void)
-{
-	_kernel_swi_regs	regs;
-	_kernel_oserror		*e;
-
-	(void)memset((void *)&regs, 0, sizeof(regs));
-	regs.r[0] = 71;
-	regs.r[1] = 127;
-	e = _kernel_swi(OS_Byte, &regs, &regs);
-	if (e == NULL) {
-		return regs.r[1] == 101;
-	}
-	werr(0, "Read alphabet error %d: %s", e->errnum, e->errmess);
-	return FALSE;
-} /* end of bISO_8859_1_IsCurrent */
-#else
+#if !defined(__riscos)
 /*
  * szGetHomeDirectory - get the name of the home directory
  */
@@ -118,9 +37,16 @@ szGetHomeDirectory(void)
 {
 	const char	*szHome;
 
+#if defined(__vms)
+	szHome = decc$translate_vms(getenv("HOME"));
+#else
 	szHome = getenv("HOME");
+#endif /* __vms */
+
 	if (szHome == NULL || szHome[0] == '\0') {
-#if defined(__dos)
+#if defined(N_PLAT_NLM)
+		szHome = "SYS:";
+#elif defined(__dos)
 		szHome = "C:";
 #else
 		werr(0, "I can't find the name of your HOME directory");
@@ -129,112 +55,23 @@ szGetHomeDirectory(void)
 	}
 	return szHome;
 } /* end of szGetHomeDirectory */
-#endif /* __riscos */
 
 /*
- * Check if the directory part of the given file exists, make the directory
- * if it does not exist yet.
- * Returns TRUE in case of success, otherwise FALSE.
+ * szGetAntiwordDirectory - get the name of the Antiword directory
  */
-BOOL
-bMakeDirectory(const char *szFilename)
+const char *
+szGetAntiwordDirectory(void)
 {
-#if defined(__riscos)
-	_kernel_swi_regs	regs;
-	_kernel_oserror		*e;
-	char	*pcLastDot;
-	char	szDirectory[PATH_MAX+1];
-
-	DBG_MSG("bMakeDirectory");
-	fail(szFilename == NULL || szFilename[0] == '\0');
-	DBG_MSG(szFilename);
-
-	if (strlen(szFilename) >= sizeof(szDirectory)) {
-		DBG_DEC(strlen(szFilename));
-		return FALSE;
-	}
-	strcpy(szDirectory, szFilename);
-	pcLastDot = strrchr(szDirectory, '.');
-	if (pcLastDot == NULL) {
-		/* No directory equals current directory */
-		DBG_MSG("No directory part given");
-		return TRUE;
-	}
-	*pcLastDot = '\0';
-	DBG_MSG(szDirectory);
-	/* Check if the name exists */
-	(void)memset((void *)&regs, 0, sizeof(regs));
-	regs.r[0] = 17;
-	regs.r[1] = (int)szDirectory;
-	e = _kernel_swi(OS_File, &regs, &regs);
-	if (e != NULL) {
-		werr(0, "Directory check %d: %s", e->errnum, e->errmess);
-		return FALSE;
-	}
-	if (regs.r[0] == 2) {
-		/* The name exists and it is a directory */
-		DBG_MSG("The directory already exists");
-		return TRUE;
-	}
-	if (regs.r[0] != 0) {
-		/* The name exists and it is not a directory */
-		DBG_DEC(regs.r[0]);
-		return FALSE;
-	}
-	/* The name does not exist, make the directory */
-	(void)memset((void *)&regs, 0, sizeof(regs));
-	regs.r[0] = 8;
-	regs.r[1] = (int)szDirectory;
-	regs.r[4] = 0;
-	e = _kernel_swi(OS_File, &regs, &regs);
-	if (e != NULL) {
-		werr(0, "I can't make a directory %d: %s",
-			e->errnum, e->errmess);
-		return FALSE;
-	}
-	return TRUE;
+#if defined(__vms)
+	return decc$translate_vms(getenv("ANTIWORDHOME"));
 #else
-	struct stat	tBuffer;
-	char	*pcLastSeparator;
-	char	szDirectory[PATH_MAX+1];
-
-	DBG_MSG("bMakeDirectory");
-	fail(szFilename == NULL || szFilename[0] == '\0');
-	DBG_MSG(szFilename);
-
-	if (strlen(szFilename) >= sizeof(szDirectory)) {
-		DBG_DEC(strlen(szFilename));
-		return FALSE;
-	}
-	strcpy(szDirectory, szFilename);
-	pcLastSeparator = strrchr(szDirectory, FILE_SEPARATOR[0]);
-	if (pcLastSeparator == NULL) {
-		/* No directory equals current directory */
-		DBG_MSG("No directory part given");
-		return TRUE;
-	}
-	*pcLastSeparator = '\0';
-	if (stat(szDirectory, &tBuffer) == 0) {
-		if (S_ISDIR(tBuffer.st_mode)) {
-			/* The name exists and it is a directory */
-			DBG_MSG("The directory already exists");
-			return TRUE;
-		}
-		/* The name exists and it is not a directory */
-		DBG_HEX(tBuffer.st_mode);
-		return FALSE;
-	}
-	/* The name does not exist, make the directory */
-	if (mkdir(szDirectory, 0755) < 0) {
-		werr(0, "I can't make a directory; errno=%d", errno);
-		return FALSE;
-	}
-	return TRUE;
-#endif /* __riscos */
-} /* end of bMakeDirectory */
+	return getenv("ANTIWORDHOME");
+#endif /* __vms */
+} /* end of szGetAntiwordDirectory */
+#endif /* !__riscos */
 
 /*
- * Get the size of the given file.
+ * Get the size of the specified file.
  * Returns -1 if the file does not exist or is not a proper file.
  */
 long
@@ -276,7 +113,7 @@ lGetFilesize(const char *szFilename)
 #if defined(DEBUG)
 void
 vPrintBlock(const char	*szFile, int iLine,
-		const unsigned char *aucBlock, size_t tLength)
+		const UCHAR *aucBlock, size_t tLength)
 {
 	int i, j;
 
@@ -284,31 +121,33 @@ vPrintBlock(const char	*szFile, int iLine,
 
 	fprintf(stderr, "%s[%3d]:\n", szFile, iLine);
 	for (i = 0; i < 32; i++) {
-		fprintf(stderr, "%03x: ", 16 * i);
+		if (16 * i >= (int)tLength) {
+			return;
+		}
+		fprintf(stderr, "%03x: ", (unsigned int)(16 * i));
 		for (j = 0; j < 16; j++) {
-			if (16 * i + j >= (int)tLength) {
-				if (j > 0) {
-					fprintf(stderr, "\n");
-				}
-				return;
+			if (16 * i + j < (int)tLength) {
+				fprintf(stderr, "%02x ",
+					(unsigned int)aucBlock[16 * i + j]);
 			}
-			fprintf(stderr, "%02x ", aucBlock[16 * i + j]);
 		}
 		fprintf(stderr, "\n");
 	}
 } /* end of vPrintBlock */
 
 void
-vPrintUnicode(const char  *szFile, int iLine, const char *s)
+vPrintUnicode(const char  *szFile, int iLine, const UCHAR *aucUni, size_t tLen)
 {
-	size_t	tLen;
 	char	*szASCII;
 
-	tLen = unilen(s) / 2;
+	fail(tLen % 2 != 0);
+
+	tLen /= 2;	/* Length in bytes to length in characters */
 	szASCII = xmalloc(tLen + 1);
-	(void)unincpy(szASCII, s, tLen);
+	(void)unincpy(szASCII, aucUni, tLen);
 	szASCII[tLen] = '\0';
-	(void)fprintf(stderr, "%s[%3d]: %.240s\n", szFile, iLine, szASCII);
+	(void)fprintf(stderr, "%s[%3d]: %.*s\n",
+				szFile, iLine, (int)tLen, szASCII);
 	szASCII = xfree(szASCII);
 } /* end of vPrintUnicode */
 
@@ -336,19 +175,22 @@ bCheckDoubleLinkedList(output_type *pAnchor)
 
 /*
  * bReadBytes
- * This function reads the given number of bytes from the given file,
- * starting from the given offset.
+ * This function reads the specified number of bytes from the specified file,
+ * starting from the specified offset.
  * Returns TRUE when successfull, otherwise FALSE
  */
 BOOL
-bReadBytes(unsigned char *aucBytes, size_t tMemb, long lOffset, FILE *pFile)
+bReadBytes(UCHAR *aucBytes, size_t tMemb, ULONG ulOffset, FILE *pFile)
 {
-	fail(aucBytes == NULL || pFile == NULL || lOffset < 0);
+	fail(aucBytes == NULL || pFile == NULL || ulOffset > (ULONG)LONG_MAX);
 
-	if (fseek(pFile, lOffset, SEEK_SET) != 0) {
+	if (ulOffset > (ULONG)LONG_MAX) {
 		return FALSE;
 	}
-	if (fread(aucBytes, sizeof(unsigned char), tMemb, pFile) != tMemb) {
+	if (fseek(pFile, (long)ulOffset, SEEK_SET) != 0) {
+		return FALSE;
+	}
+	if (fread(aucBytes, sizeof(UCHAR), tMemb, pFile) != tMemb) {
 		return FALSE;
 	}
 	return TRUE;
@@ -356,46 +198,47 @@ bReadBytes(unsigned char *aucBytes, size_t tMemb, long lOffset, FILE *pFile)
 
 /*
  * bReadBuffer
- * This function fills the given buffer with the given number of bytes,
- * starting at the given offset within the Big/Small Block Depot.
+ * This function fills the specified buffer with the specified number of bytes,
+ * starting at the specified offset within the Big/Small Block Depot.
  *
  * Returns TRUE when successful, otherwise FALSE
  */
 BOOL
-bReadBuffer(FILE *pFile, int iStartBlock,
-	const int *aiBlockDepot, size_t tBlockDepotLen, size_t tBlockSize,
-	unsigned char *aucBuffer, size_t tOffset, size_t tToRead)
+bReadBuffer(FILE *pFile, ULONG ulStartBlock,
+	const ULONG *aulBlockDepot, size_t tBlockDepotLen, size_t tBlockSize,
+	UCHAR *aucBuffer, ULONG ulOffset, size_t tToRead)
 {
-	long	lBegin;
+	ULONG	ulBegin, ulIndex;
 	size_t	tLen;
-	int	iIndex;
 
 	fail(pFile == NULL);
-	fail(iStartBlock < 0);
-	fail(aiBlockDepot == NULL);
+	fail(ulStartBlock > MAX_BLOCKNUMBER && ulStartBlock != END_OF_CHAIN);
+	fail(aulBlockDepot == NULL);
 	fail(tBlockSize != BIG_BLOCK_SIZE && tBlockSize != SMALL_BLOCK_SIZE);
 	fail(aucBuffer == NULL);
 	fail(tToRead == 0);
 
-	for (iIndex = iStartBlock;
-	     iIndex != END_OF_CHAIN && tToRead != 0;
-	     iIndex = aiBlockDepot[iIndex]) {
-		if (iIndex < 0 || iIndex >= (int)tBlockDepotLen) {
+	for (ulIndex = ulStartBlock;
+	     ulIndex != END_OF_CHAIN && tToRead != 0;
+	     ulIndex = aulBlockDepot[ulIndex]) {
+		if (ulIndex >= (ULONG)tBlockDepotLen) {
+			DBG_DEC(ulIndex);
+			DBG_DEC(tBlockDepotLen);
 			if (tBlockSize >= BIG_BLOCK_SIZE) {
-				werr(1, "The Big Block Depot is corrupt");
+				werr(1, "The Big Block Depot is damaged");
 			} else {
-				werr(1, "The Small Block Depot is corrupt");
+				werr(1, "The Small Block Depot is damaged");
 			}
 		}
-		if (tOffset >= tBlockSize) {
-			tOffset -= tBlockSize;
+		if (ulOffset >= (ULONG)tBlockSize) {
+			ulOffset -= tBlockSize;
 			continue;
 		}
-		lBegin = lDepotOffset(iIndex, tBlockSize) + (long)tOffset;
-		tLen = min(tBlockSize - tOffset, tToRead);
-		tOffset = 0;
-		if (!bReadBytes(aucBuffer, tLen, lBegin, pFile)) {
-			werr(0, "Read big block %ld not possible", lBegin);
+		ulBegin = ulDepotOffset(ulIndex, tBlockSize) + ulOffset;
+		tLen = min(tBlockSize - (size_t)ulOffset, tToRead);
+		ulOffset = 0;
+		if (!bReadBytes(aucBuffer, tLen, ulBegin, pFile)) {
+			werr(0, "Read big block 0x%lx not possible", ulBegin);
 			return FALSE;
 		}
 		aucBuffer += tLen;
@@ -410,34 +253,33 @@ bReadBuffer(FILE *pFile, int iStartBlock,
  *
  * Returns the true color
  */
-unsigned int
-uiColor2Color(int iWordColor)
+ULONG
+ulColor2Color(UCHAR ucFontColor)
 {
-	static const unsigned int	auiColorTable[] = {
-		/*  0 */	0x00000000U,	/* Automatic */
-		/*  1 */	0x00000000U,	/* Black */
-		/*  2 */	0xff000000U,	/* Blue */
-		/*  3 */	0xffff0000U,	/* Turquoise */
-		/*  4 */	0x00ff0000U,	/* Bright Green */
-		/*  5 */	0xff00ff00U,	/* Pink */
-		/*  6 */	0x0000ff00U,	/* Red */
-		/*  7 */	0x00ffff00U,	/* Yellow */
-		/*  8 */	0xffffff00U,	/* White */
-		/*  9 */	0x80000000U,	/* Dark Blue */
-		/* 10 */	0x80800000U,	/* Teal */
-		/* 11 */	0x00800000U,	/* Green */
-		/* 12 */	0x80008000U,	/* Violet */
-		/* 13 */	0x00008000U,	/* Dark Red */
-		/* 14 */	0x00808000U,	/* Dark Yellow */
-		/* 15 */	0x80808000U,	/* Gray 50% */
-		/* 16 */	0xc0c0c000U,	/* Gray 25% */
+	static const ULONG	aulColorTable[] = {
+		/*  0 */	0x00000000UL,	/* Automatic */
+		/*  1 */	0x00000000UL,	/* Black */
+		/*  2 */	0xff000000UL,	/* Blue */
+		/*  3 */	0xffff0000UL,	/* Turquoise */
+		/*  4 */	0x00ff0000UL,	/* Bright Green */
+		/*  5 */	0xff00ff00UL,	/* Pink */
+		/*  6 */	0x0000ff00UL,	/* Red */
+		/*  7 */	0x00ffff00UL,	/* Yellow */
+		/*  8 */	0xffffff00UL,	/* White */
+		/*  9 */	0x80000000UL,	/* Dark Blue */
+		/* 10 */	0x80800000UL,	/* Teal */
+		/* 11 */	0x00800000UL,	/* Green */
+		/* 12 */	0x80008000UL,	/* Violet */
+		/* 13 */	0x00008000UL,	/* Dark Red */
+		/* 14 */	0x00808000UL,	/* Dark Yellow */
+		/* 15 */	0x80808000UL,	/* Gray 50% */
+		/* 16 */	0xc0c0c000UL,	/* Gray 25% */
 	};
-	if (iWordColor < 0 ||
-	    iWordColor >= (int)elementsof(auiColorTable)) {
-		return auiColorTable[0];
+	if ((size_t)ucFontColor >= elementsof(aulColorTable)) {
+		return aulColorTable[0];
 	}
-	return auiColorTable[iWordColor];
-} /* end of uiColor2Color */
+	return aulColorTable[(int)ucFontColor];
+} /* end of ulColor2Color */
 
 /*
  * iFindSplit - find a place to split the string
@@ -445,23 +287,26 @@ uiColor2Color(int iWordColor)
  * returns the index of the split character or -1 if no split found.
  */
 static int
-iFindSplit(const char *szString, int iStringLen)
+iFindSplit(const char *szString, size_t tStringLen)
 {
-	int	iSplit;
+	size_t	tSplit;
 
-	iSplit = iStringLen - 1;
-	while (iSplit >= 1) {
-		if (szString[iSplit] == ' ' ||
-		    (szString[iSplit] == '-' && szString[iSplit - 1] != ' ')) {
-			return iSplit;
+	if (tStringLen == 0) {
+		return -1;
+	}
+	tSplit = tStringLen - 1;
+	while (tSplit >= 1) {
+		if (szString[tSplit] == ' ' ||
+		    (szString[tSplit] == '-' && szString[tSplit - 1] != ' ')) {
+			return (int)tSplit;
 		}
-		iSplit--;
+		tSplit--;
 	}
 	return -1;
 } /* end of iFindSplit */
 
 /*
- * pSplitList - split the given list in a printable part and a leftover part
+ * pSplitList - split the specified list in a printable part and a leftover part
  *
  * returns the pointer to the leftover part
  */
@@ -477,7 +322,7 @@ pSplitList(output_type *pAnchor)
 		;	/* EMPTY */
 	iIndex = -1;
 	for (; pCurr != NULL; pCurr = pCurr->pPrev) {
-		iIndex = iFindSplit(pCurr->szStorage, pCurr->iNextFree);
+		iIndex = iFindSplit(pCurr->szStorage, pCurr->tNextFree);
 		if (iIndex >= 0) {
 			break;
 		}
@@ -490,22 +335,23 @@ pSplitList(output_type *pAnchor)
 	/* Split over the iIndex-th character */
 	NO_DBG_MSG("pLeftOver");
 	pLeftOver = xmalloc(sizeof(*pLeftOver));
-	pLeftOver->tStorageSize = (size_t)(pCurr->iNextFree - iIndex);
+	fail(pCurr->tNextFree < (size_t)iIndex);
+	pLeftOver->tStorageSize = pCurr->tNextFree - (size_t)iIndex;
 	pLeftOver->szStorage = xmalloc(pLeftOver->tStorageSize);
-	pLeftOver->iNextFree = pCurr->iNextFree - iIndex - 1;
+	pLeftOver->tNextFree = pCurr->tNextFree - (size_t)iIndex - 1;
 	(void)strncpy(pLeftOver->szStorage,
-		pCurr->szStorage + iIndex + 1, (size_t)pLeftOver->iNextFree);
-	pLeftOver->szStorage[pLeftOver->iNextFree] = '\0';
+		pCurr->szStorage + iIndex + 1, pLeftOver->tNextFree);
+	pLeftOver->szStorage[pLeftOver->tNextFree] = '\0';
 	NO_DBG_MSG(pLeftOver->szStorage);
-	pLeftOver->iColor = pCurr->iColor;
-	pLeftOver->ucFontstyle = pCurr->ucFontstyle;
+	pLeftOver->ucFontColor = pCurr->ucFontColor;
+	pLeftOver->usFontStyle = pCurr->usFontStyle;
 	pLeftOver->tFontRef = pCurr->tFontRef;
-	pLeftOver->sFontsize = pCurr->sFontsize;
+	pLeftOver->usFontSize = pCurr->usFontSize;
 	pLeftOver->lStringWidth = lComputeStringWidth(
 					pLeftOver->szStorage,
-					pLeftOver->iNextFree,
+					pLeftOver->tNextFree,
 					pLeftOver->tFontRef,
-					pLeftOver->sFontsize);
+					pLeftOver->usFontSize);
 	pLeftOver->pPrev = NULL;
 	pLeftOver->pNext = pCurr->pNext;
 	if (pLeftOver->pNext != NULL) {
@@ -515,17 +361,17 @@ pSplitList(output_type *pAnchor)
 
 	NO_DBG_MSG("pAnchor");
 	NO_DBG_HEX(pCurr->szStorage[iIndex]);
-	while (iIndex >= 0 && isspace(pCurr->szStorage[iIndex])) {
+	while (iIndex >= 0 && isspace((int)(UCHAR)pCurr->szStorage[iIndex])) {
 		iIndex--;
 	}
-	pCurr->iNextFree = iIndex + 1;
-	pCurr->szStorage[pCurr->iNextFree] = '\0';
+	pCurr->tNextFree = (size_t)iIndex + 1;
+	pCurr->szStorage[pCurr->tNextFree] = '\0';
 	NO_DBG_MSG(pCurr->szStorage);
 	pCurr->lStringWidth = lComputeStringWidth(
 					pCurr->szStorage,
-					pCurr->iNextFree,
+					pCurr->tNextFree,
 					pCurr->tFontRef,
-					pCurr->sFontsize);
+					pCurr->usFontSize);
 	pCurr->pNext = NULL;
 	fail(!bCheckDoubleLinkedList(pAnchor));
 
@@ -533,105 +379,114 @@ pSplitList(output_type *pAnchor)
 } /* end of pSplitList */
 
 /*
- * iInteger2Roman - convert an integer to Roman Numerals
+ * tNumber2Roman - convert a number to Roman Numerals
  *
  * returns the number of characters written
  */
-int
-iInteger2Roman(int iNumber, BOOL bUpperCase, char *szOutput)
+size_t
+tNumber2Roman(UINT uiNumber, BOOL bUpperCase, char *szOutput)
 {
-	char *outp, *p, *q;
-	int iNextVal, iValue;
+	char	*outp, *p, *q;
+	UINT	uiNextVal, uiValue;
 
 	fail(szOutput == NULL);
 
-	if (iNumber <= 0 || iNumber >= 4000) {
+	uiNumber %= 4000;	/* Very high numbers can't be represented */
+	if (uiNumber == 0) {
 		szOutput[0] = '\0';
 		return 0;
 	}
 
 	outp = szOutput;
 	p = bUpperCase ? "M\2D\5C\2L\5X\2V\5I" : "m\2d\5c\2l\5x\2v\5i";
-	iValue = 1000;
+	uiValue = 1000;
 	for (;;) {
-		while (iNumber >= iValue) {
+		while (uiNumber >= uiValue) {
 			*outp++ = *p;
-			iNumber -= iValue;
+			uiNumber -= uiValue;
 		}
-		if (iNumber <= 0) {
+		if (uiNumber == 0) {
 			*outp = '\0';
-			return outp - szOutput;
+			fail(outp < szOutput);
+			return (size_t)(outp - szOutput);
 		}
 		q = p + 1;
-		iNextVal = iValue / (int)*q;
+		uiNextVal = uiValue / (UINT)(UCHAR)*q;
 		if ((int)*q == 2) {		/* magic */
-			iNextVal /= (int)*(q += 2);
+			uiNextVal /= (UINT)(UCHAR)*(q += 2);
 		}
-		if (iNumber + iNextVal >= iValue) {
+		if (uiNumber + uiNextVal >= uiValue) {
 			*outp++ = *++q;
-			iNumber += iNextVal;
+			uiNumber += uiNextVal;
 		} else {
 			p++;
-			iValue /= (int)(*p++);
+			uiValue /= (UINT)(UCHAR)(*p++);
 		}
 	}
-} /* end of iInteger2Roman */
+} /* end of tNumber2Roman */
 
 /*
- * iInteger2Alpha - convert an integer to Alphabetic "numbers"
+ * iNumber2Alpha - convert a number to alphabetic "numbers"
  *
  * returns the number of characters written
  */
-int
-iInteger2Alpha(int iNumber, BOOL bUpperCase, char *szOutput)
+size_t
+tNumber2Alpha(UINT uiNumber, BOOL bUpperCase, char *szOutput)
 {
 	char	*outp;
-	int	iTmp;
+	UINT	uiTmp;
 
 	fail(szOutput == NULL);
 
+	if (uiNumber == 0) {
+		szOutput[0] = '\0';
+		return 0;
+	}
+
 	outp = szOutput;
-	iTmp = bUpperCase ? 'A': 'a';
-	if (iNumber <= 26) {
-		iNumber -= 1;
-		*outp++ = (char)(iTmp + iNumber);
-	} else if (iNumber <= 26 + 26*26) {
-		iNumber -= 26 + 1;
-		*outp++ = (char)(iTmp + iNumber / 26);
-		*outp++ = (char)(iTmp + iNumber % 26);
-	} else if (iNumber <= 26 + 26*26 + 26*26*26) {
-		iNumber -= 26 + 26*26 + 1;
-		*outp++ = (char)(iTmp + iNumber / (26*26));
-		*outp++ = (char)(iTmp + iNumber / 26 % 26);
-		*outp++ = (char)(iTmp + iNumber % 26);
+	uiTmp = (UINT)(bUpperCase ? 'A': 'a');
+	if (uiNumber <= 26) {
+		uiNumber -= 1;
+		*outp++ = (char)(uiTmp + uiNumber);
+	} else if (uiNumber <= 26U + 26U*26U) {
+		uiNumber -= 26 + 1;
+		*outp++ = (char)(uiTmp + uiNumber / 26);
+		*outp++ = (char)(uiTmp + uiNumber % 26);
+	} else if (uiNumber <= 26U + 26U*26U + 26U*26U*26U) {
+		uiNumber -= 26 + 26*26 + 1;
+		*outp++ = (char)(uiTmp + uiNumber / (26*26));
+		*outp++ = (char)(uiTmp + uiNumber / 26 % 26);
+		*outp++ = (char)(uiTmp + uiNumber % 26);
 	}
 	*outp = '\0';
-	return outp - szOutput;
-} /* end of iInteger2Alpha */
+	fail(outp < szOutput);
+	return (size_t)(outp - szOutput);
+} /* end of tNumber2Alpha */
 
 /*
  * unincpy - copy a counted Unicode string to an single-byte string
  */
 char *
-unincpy(char *s1, const char *s2, size_t n)
+unincpy(char *s1, const UCHAR *s2, size_t n)
 {
-	char		*dest;
-	size_t		len;
-	int		iChar;
-	unsigned short	usUni;
+	char	*dest;
+	ULONG	ulChar;
+	size_t	tLen;
+	USHORT	usUni;
 
-	for (dest = s1, len = 0; len < n; dest++, len++) {
-		usUni = usGetWord(len * 2, s2);
+	for (dest = s1, tLen = 0; tLen < n; dest++, tLen++) {
+		usUni = usGetWord(tLen * 2, s2);
 		if (usUni == 0) {
 			break;
 		}
-		iChar = iTranslateCharacters(usUni, 0, FALSE);
-		if (iChar == IGNORE_CHARACTER) {
-			iChar = '?';
+		ulChar = ulTranslateCharacters(usUni, 0, 8,
+				conversion_unknown, encoding_neutral, FALSE);
+		if (ulChar == IGNORE_CHARACTER) {
+			ulChar = (ULONG)'?';
 		}
-		*dest = (char)iChar;
+		*dest = (char)ulChar;
 	}
-	for (; len < n; len++) {
+	for (; tLen < n; tLen++) {
 		*dest++ = '\0';
 	}
 	return s1;
@@ -639,16 +494,18 @@ unincpy(char *s1, const char *s2, size_t n)
 
 /*
  * unilen - calculate the length of a Unicode string
+ *
+ * returns the length in bytes
  */
 size_t
-unilen(const char *s)
+unilen(const UCHAR *s)
 {
-	size_t		tLen;
-	unsigned short	usUni;
+	size_t	tLen;
+	USHORT	usUni;
 
 	tLen = 0;
 	for (;;) {
-		usUni = usGetWord(tLen * 2, s);
+		usUni = usGetWord(tLen, s);
 		if (usUni == 0) {
 			return tLen;
 		}
@@ -657,7 +514,7 @@ unilen(const char *s)
 } /* end of unilen */
 
 /*
- * szBaseName - get the basename of the given filename
+ * szBaseName - get the basename of the specified filename
  */
 const char *
 szBasename(const char *szFilename)
@@ -676,3 +533,115 @@ szBasename(const char *szFilename)
 	}
 	return ++szTmp;
 } /* end of szBasename */
+
+/*
+ * lComputeLeading - compute the leading
+ *
+ * NOTE: the fontsize is specified in half points
+ *
+ * Returns the leading in drawunits
+ */
+long
+lComputeLeading(USHORT usFontSize)
+{
+	long	lLeading;
+
+	lLeading = (long)usFontSize * 500L;
+	if (usFontSize < 18) {		/* Small text: 112% */
+		lLeading *= 112;
+	} else if (usFontSize < 28) {	/* Normal text: 124% */
+		lLeading *= 124;
+	} else if (usFontSize < 48) {	/* Small headlines: 104% */
+		lLeading *= 104;
+	} else {			/* Large headlines: 100% */
+		lLeading *= 100;
+	}
+	lLeading = lMilliPoints2DrawUnits(lLeading);
+	lLeading += 50;
+	lLeading /= 100;
+	return lLeading;
+} /* end of lComputeLeading */
+
+/*
+ * Convert a UCS character to an UTF-8 string
+ *
+ * Returns the string length of the result
+ */
+size_t
+tUcs2Utf8(ULONG ulChar, char *szResult, size_t tMaxResultLen)
+{
+	if (szResult == NULL || tMaxResultLen == 0) {
+		return 0;
+	}
+
+	if (ulChar < 0x80 && tMaxResultLen >= 2) {
+		szResult[0] = (char)ulChar;
+		szResult[1] = '\0';
+		return 1;
+	}
+	if (ulChar < 0x800 && tMaxResultLen >= 3) {
+		szResult[0] = (char)(0xc0 | ulChar >> 6);
+		szResult[1] = (char)(0x80 | (ulChar & 0x3f));
+		szResult[2] = '\0';
+		return 2;
+	}
+	if (ulChar < 0x10000 && tMaxResultLen >= 4) {
+		szResult[0] = (char)(0xe0 | ulChar >> 12);
+		szResult[1] = (char)(0x80 | (ulChar >> 6 & 0x3f));
+		szResult[2] = (char)(0x80 | (ulChar & 0x3f));
+		szResult[3] = '\0';
+		return 3;
+	}
+	if (ulChar < 0x200000 && tMaxResultLen >= 5) {
+		szResult[0] = (char)(0xf0 | ulChar >> 18);
+		szResult[1] = (char)(0x80 | (ulChar >> 12 & 0x3f));
+		szResult[2] = (char)(0x80 | (ulChar >> 6 & 0x3f));
+		szResult[3] = (char)(0x80 | (ulChar & 0x3f));
+		szResult[4] = '\0';
+		return 4;
+	}
+	szResult[0] = '\0';
+	return 0;
+} /* end of tUcs2Utf8 */
+
+/*
+ * vGetBulletValue - get the bullet value for the conversing type and encoding
+ */
+void
+vGetBulletValue(conversion_type eConversionType, encoding_type eEncoding,
+	char *szResult, size_t tMaxResultLen)
+{
+	fail(szResult == NULL);
+	fail(tMaxResultLen < 2);
+
+	if (eEncoding == encoding_utf8) {
+		(void)tUcs2Utf8(UNICODE_BULLET, szResult, tMaxResultLen);
+	} else if (eEncoding == encoding_iso_8859_1 &&
+		   eConversionType == conversion_ps) {
+		szResult[0] = OUR_BULLET_PS;
+		szResult[1] = '\0';
+	} else {
+		szResult[0] = OUR_BULLET_TEXT;
+		szResult[1] = '\0';
+	}
+} /* end of vGetBulletValue */
+
+/*
+ * bAllZero - are all bytes zero?
+ */
+BOOL
+bAllZero(const UCHAR *aucBytes, size_t tLength)
+{
+	size_t	tIndex;
+
+	if (aucBytes == NULL || tLength == 0) {
+		return TRUE;
+	}
+
+	for (tIndex = 0; tIndex < tLength; tIndex++) {
+		if (aucBytes[tIndex] != 0) {
+			return FALSE;
+		}
+	}
+	return TRUE;
+} /* end of bAllZero */

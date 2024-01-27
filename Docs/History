@@ -1,41 +1,44 @@
-History of AntiWord by © Adri van Os
+History of Antiword by (C) Adri van Os
 ------------------------------------
 
 
 The Name
 --------
-The name comes from: "The antidote against people who send Microsoft® Word
-files to everybody, because they believe that everybody runs Windows® and
+The name comes from: "The antidote against people who send Microsoft(R) Word
+files to everybody, because they believe that everybody runs Windows(R) and
 therefore runs Word".
 
 
-Version 0.31 (08 Dec 2000)
+Version 0.35 (14 Nov 2003)
 --------------------------
-Early beta release, for evaluation by the public.
+Beta release, for evaluation by the public.
 
 
 Known Limitations
 -----------------
 
-1) The layout of Word files is kept "secret" by Microsoft®. Therefore
-   AntiWord is based on information gathered from the Internet and on
+1) The layout of Word documents is kept secret by Microsoft(R). Therefore
+   Antiword is based on information gathered from the Internet and on
    guesswork.
-2) AntiWord doesn't show all the pictures included in the Wordfile.
-3) AntiWords can not deal with very large files. The current maximum size
-   of an inputfile is about 7 MB.
-4) AntiWord doesn't do any hyphenation. It doesn't because hyphenation is
-   language dependant.
-5) AntiWord doesn't try to emulate any of Words DTP abilities.
-6) The error messages from AntiWord are not very helpful.
+2) Antiword doesn't show all the images included in a Word document.
+3) Antiword doesn't do any hyphenation, because hyphenation is language
+   dependent.
+4) Antiword places footnotes at the end of the text.
+5) Antiword places box text after normal text and not in a box.
+6) Antiword doesn't try to emulate any of Word's DTP abilities.
+7) PostScript ouput will not work in combination with UTF-8. It only works in
+   combination with character sets ISO 8859-1 and ISO 8859-2.
+8) Antiword's error messages are not very helpful.
 
 
 Known Bugs
 ----------
 
-1) AntiWord can not handle encrypted documents.
-2) AntiWord assumes default tabstops.
-3) AntiWord doesn't handle sections, styles, frames.
-4) AntiWord ignores pages headers and footers.
-5) AntiWord adds numbers to all the headers instead of selectively.
-6) AntiWord only handles lists in some of the styles in Word 6 and Word 7
-   and does not handle lists at all in Word 97 and 2000.
+1) Antiword cannot handle encrypted documents.
+2) Antiword assumes default tab stops.
+3) Antiword doesn't handle frames.
+4) Antiword ignores page headers and footers.
+5) Antiword only handles lists in some of the styles.
+6) Antiword cannot handle some types of multilevel lists.
+7) Antiword assumes that all Word documents made on a Macintosh with Word
+   version 6 or older use the MacRoman character set.

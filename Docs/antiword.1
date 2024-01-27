@@ -1,4 +1,4 @@
-.TH ANTIWORD 1 "Dec 05, 2000" "Antiword 0.31" "Linux User\'s Manual"
+.TH ANTIWORD 1 "Sep 13, 2003" "Antiword 0.35" "Linux User's Manual"
 .SH NAME
 antiword - show the text and images of MS Word documents
 .SH SYNOPSIS
@@ -8,22 +8,26 @@ antiword - show the text and images of MS Word documents
 ]
 .I wordfiles
 .SH DESCRIPTION
-.I antiword
+.I Antiword
 is an application that displays the text and the images of Microsoft Word
-documents.  Only documents made by MS Word version 6 or later are supported.
+documents.
+.br
+A wordfile named - stands for a Word document read from the standard input.
+.br
+Only documents made by MS Word version 2 and version 6 or later are supported.
 .SH OPTIONS
 .TP
 .B \-h
 Give a help message.
 .TP
 .BI "\-i " "image level"
-The image level decides how images will be shown.
+The image level determines how images will be shown.
 .RS
 .TP 3
 0:
-Use non-standard extentions from Ghostscript. This output may not print on
-any PostScript printer, but is useful in case no hard-copy is needed. It is
-also useful when Gostscript is used as a filter to print a PostScript file to
+Use non-standard extensions from Ghostscript. This output may not print on
+any PostScript printer, but is useful in case no hard copy is needed. It is
+also useful when Ghostscript is used as a filter to print a PostScript file to
 a non-PostScript printer.
 .TP 3
 1:
@@ -38,71 +42,84 @@ images are not printed correctly)
 .RE
 .TP
 .BI "\-m " "mapping file"
-This file is used to map Unicode characters to your local single-byte
-characters set. The default is 8859-1.txt for Western European languages.
+This file is used to map Unicode characters to your local character set.
+The default is UTF-8.txt in locales that support UTF-8 and 8859-1.txt in other
+locales.
 .TP
 .BI "\-p " papersize
-Output in PostScript form. Printable on paper of the given size: 10x14,
+Output in PostScript form. Printable on paper of the specified size: 10x14,
 a3, a4, a5, b4, b5, executive, folio, legal, letter, note, quarto, statement
 or tabloid.
 .TP
 .B \-s
-Include text with the so called "hidden text" attribute.
+Include text with the so-called "hidden text" attribute.
 .TP
 .B \-t
 Output in text form. (default)
 .TP
 .BI "\-w " width
-In text mode this is the width of a line in characters. A value of zero puts
-an entire paragraph on a line, useful when the text is to used as input for an
-other wordprocessor. This value is ignored in PostScript mode.
+In text mode this is the line width in characters. A value of zero puts an
+entire paragraph on a line, useful when the text is to used as input for
+another wordprocessor. This value is ignored in PostScript mode.
+.TP
+.BI "\-x " "document type definition"
+Output in XML form. Currently the only document type definition is db
+(for DocBook).
 .TP
 .B \-L
 In PostScript mode: use landscape mode.
 .RE
-.TP
-.B "\-X PostScript encoding"
-.RS
-.TP 3
-1:
-In Postscript mode: encode in the ISO-8859-1 character set.
-(This option implies -m 8859-1.txt) (default)
-.TP 3
-2:
-In Postscript mode: encode in the ISO-8859-2 character set.
-(This option implies -m 8859-2.txt) (EXPERIMENTAL and UNTESTED)
-.RE
 .SH FILES
 .TP
-$HOME/.antiword/8859-1.txt and friends:
+Mapping files like 8859-1.txt
 .br
-Mapping files (see -m option)
+Antiword looks for its mapping files in three directories, in the order given:
+.br
+(1) The directory specified by $ANTIWORDHOME
+.br
+(2) The directory specified by $HOME/.antiword
+.br
+(3) Directory /usr/share/antiword
 .TP
-$HOME/.antiword/fontnames:
+The fontnames file
 .br
-This file contains the translation table from font names as used by MS Word to
-fontnames used by PostScript.
+Antiword will look for its fontname file in the same directories as used for the
+mapping files.
+.br
+The fontnames file contains the translation table from font names used by MS
+Word to font names used by PostScript.
+.TP
+NOTE:
+.br
+Antiword cannot tell the difference between a file that does not exist and a
+file that cannot be opened for reading.
 .SH ENVIRONMENT
-Antiword uses the environment variable ``HOME'' to find the home directory of
-the user. When in text mode it uses the variable ``COLUMNS'' to set the width
-of the output (unless overridden by the -w option).
+Antiword uses the environment variable ``ANTIWORDHOME'' as the first directory
+to look for its files. Antiword uses the environment variable ``HOME'' to find
+the user's home directory. When in text mode it uses the variable ``COLUMNS''
+to set the width of the output (unless overridden by the -w option).
 .SH BUGS
 Antiword is far from complete. Many features are still missing. Many images are
 not shown yet. Some of the images that are shown, are shown in the wrong place.
-.SH WEB SIDES
-The most recent released version of antiword is always available from:
+PostScript output is only available in ISO 8859-1 and ISO 8859-2.
+.SH WEB SITES
+The most recent released version of Antiword is always available from:
 .br
 http://www.winfield.demon.nl/index.html
 .br
 or try
 .br
-http://www.antiword.org/
+http://antiword.cjb.net/
 .SH AUTHOR
 Adri van Os <antiword@winfield.demon.nl>
 .br
-or try <comments@antiword.org>
+or try <comments@antiword.cjb.net>
 .sp
-R.F. Smith <rsmith@xs4all.nl> contibuted to this manual page.
+R.F. Smith <rsmith@xs4all.nl> and
+.br
+Sindi Keesan <keesan@cyberspace.org>
+.br
+contributed to this manual page.
 .SH LICENSE
 Antiword is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the Free
@@ -120,7 +137,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 .SH ACKNOWLEDGEMENTS
 Linux is a registered trademark of Linus Torvalds.
 .br
-Postscript is a trademark of Adobe Systems Incorporated.
+PostScript is a trademark of Adobe Systems Incorporated.
 .br
 Microsoft is a registered trademark and Windows is a trademark of Microsoft
 Corporation.

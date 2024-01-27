@@ -73,3 +73,57 @@ Note that one also needs to have xless installed.  It can be found on the
 SGI Freeware Feb 1999 (or later) CD-ROM.
 
 - Craig
+
+===============================================================================
+
+From: Bruno Crochet <bruno.crochet@pse.unige.ch>
+
+Hi!
+
+Another way to integrate antiword into netscape is to copy the following
+line in your .mailcap file :
+
+application/msword; ns="%s"\; nf="${ns}".ps\; antiword -pa4 "${ns}" >
+"${nf}"\; gv "${nf}"\; sleep 2 \; rm "${nf}"
+
+Bruno.
+
+===============================================================================
+
+From: Andoni Zarate <azarate@saincotrafico.com>
+
+In order to view the file into netscape you can write the xantiword file
+like this:
+ 
+#!/bin/csh -f
+setenv FILE $1
+setenv NEWFILE ${FILE}.xantiword
+/usr/local/bin/antiword $FILE >&$NEWFILE
+netscape -remote 'openFile('$NEWFILE')'
+ 
+Andoni Zárate.
+
+===============================================================================
+
+From: Evelyne Pinter <epinter@ptcs.ch>
+
+I include a script for netscape to see the document with ghostview.
+ 
+#!/bin/csh -f
+setenv FILE $1
+setenv NEWFILE ${FILE}.xantiword
+/usr/local/bin/antiword -pa4 $FILE >&$NEWFILE
+/usr/X11R6/bin/gv $NEWFILE
+rm -f $NEWFILE
+ 
+In netscape the application must be called like that
+"/usr/local/bin/xantiword %s"
+ 
+This is just a small change(done by Roger Luechinger) to the xantiword
+you included in the distribution 0.31
+ 
+Thanks
+ 
+SG E.M.S.P.
+
+===============================================================================

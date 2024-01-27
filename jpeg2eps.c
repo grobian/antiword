@@ -1,6 +1,6 @@
 /*
  * jpeg2eps.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000-2002 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to translate jpeg pictures into eps
@@ -20,13 +20,14 @@ static int	iPicCounter = 0;
  * vCopy2File
  */
 static void
-vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
+vCopy2File(FILE *pFile, ULONG ulFileOffset, size_t tPictureLen)
 {
 	FILE	*pOutFile;
-	int	iIndex, iTmp;
+	size_t	tIndex;
+	int	iTmp;
 	char	szFilename[30];
 
-	if (!bSetDataOffset(pFile, lFileOffset)) {
+	if (!bSetDataOffset(pFile, ulFileOffset)) {
 		return;
 	}
 
@@ -35,7 +36,7 @@ vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
 	if (pOutFile == NULL) {
 		return;
 	}
-	for (iIndex = 0; iIndex < iPictureLen; iIndex++) {
+	for (tIndex = 0; tIndex < tPictureLen; tIndex++) {
 		iTmp = iNextByte(pFile);
 		if (putc(iTmp, pOutFile) == EOF) {
 			break;
@@ -54,19 +55,19 @@ vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
  */
 BOOL
 bTranslateJPEG(diagram_type *pDiag, FILE *pFile,
-		long lFileOffset, int iPictureLen, const imagedata_type *pImg)
+	ULONG ulFileOffset, size_t tPictureLen, const imagedata_type *pImg)
 {
 #if defined(DEBUG)
-	vCopy2File(pFile, lFileOffset, iPictureLen);
+	vCopy2File(pFile, ulFileOffset, tPictureLen);
 #endif /* DEBUG */
 
 	/* Seek to start position of JPEG data */
-	if (!bSetDataOffset(pFile, lFileOffset)) {
+	if (!bSetDataOffset(pFile, ulFileOffset)) {
 		return FALSE;
 	}
 
 	vImagePrologue(pDiag, pImg);
-	vASCII85EncodeFile(pFile, pDiag->pOutFile, iPictureLen);
+	vASCII85EncodeFile(pFile, pDiag->pOutFile, tPictureLen);
 	vImageEpilogue(pDiag);
 
 	return TRUE;

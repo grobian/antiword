@@ -1,6 +1,6 @@
 /*
  * dib2eps.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000-2003 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to translate dib pictures into eps
@@ -21,7 +21,7 @@
  * vDecode1bpp - decode an uncompressed 1 bit per pixel image
  */
 static void
-vDecode1bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
+vDecode1bpp(FILE *pInFile, FILE *pOutFile, const imagedata_type *pImg)
 {
 	size_t	tPadding;
 	int	iX, iY, iN, iByte, iTmp, iEighthWidth, iUse;
@@ -36,14 +36,12 @@ vDecode1bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 	DBG_DEC(pImg->iHeight);
 
 	iEighthWidth = (pImg->iWidth + 7) / 8;
-	tPadding = (size_t)(MakeFour(iEighthWidth) - iEighthWidth);
+	tPadding = (size_t)(ROUND4(iEighthWidth) - iEighthWidth);
 
 	for (iY = 0; iY < pImg->iHeight; iY++) {
 		for (iX = 0; iX < iEighthWidth; iX++) {
-			iByte = iNextByte(pFile);
+			iByte = iNextByte(pInFile);
 			if (iByte == EOF) {
-				DBG_DEC(iY);
-				DBG_DEC(iX);
 				vASCII85EncodeByte(pOutFile, EOF);
 				return;
 			}
@@ -67,7 +65,7 @@ vDecode1bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 				vASCII85EncodeByte(pOutFile, iTmp);
 			}
 		}
-		(void)iSkipBytes(pFile, tPadding);
+		(void)tSkipBytes(pInFile, tPadding);
 	}
 	vASCII85EncodeByte(pOutFile, EOF);
 } /* end of vDecode1bpp */
@@ -76,14 +74,14 @@ vDecode1bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
  * vDecode4bpp - decode an uncompressed 4 bits per pixel image
  */
 static void
-vDecode4bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
+vDecode4bpp(FILE *pInFile, FILE *pOutFile, const imagedata_type *pImg)
 {
 	size_t	tPadding;
 	int	iX, iY, iN, iByte, iTmp, iHalfWidth, iUse;
 
 	DBG_MSG("vDecode4bpp");
 
-	fail(pFile == NULL);
+	fail(pInFile == NULL);
 	fail(pOutFile == NULL);
 	fail(pImg == NULL);
 	fail(pImg->iColorsUsed < 1 || pImg->iColorsUsed > 16);
@@ -92,14 +90,12 @@ vDecode4bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 	DBG_DEC(pImg->iHeight);
 
 	iHalfWidth = (pImg->iWidth + 1) / 2;
-	tPadding = (size_t)(MakeFour(iHalfWidth) - iHalfWidth);
+	tPadding = (size_t)(ROUND4(iHalfWidth) - iHalfWidth);
 
 	for (iY = 0; iY < pImg->iHeight; iY++) {
 		for (iX = 0; iX < iHalfWidth; iX++) {
-			iByte = iNextByte(pFile);
+			iByte = iNextByte(pInFile);
 			if (iByte == EOF) {
-				DBG_DEC(iY);
-				DBG_DEC(iX);
 				vASCII85EncodeByte(pOutFile, EOF);
 				return;
 			}
@@ -117,7 +113,7 @@ vDecode4bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 				vASCII85EncodeByte(pOutFile, iTmp);
 			}
 		}
-		(void)iSkipBytes(pFile, tPadding);
+		(void)tSkipBytes(pInFile, tPadding);
 	}
 	vASCII85EncodeByte(pOutFile, EOF);
 } /* end of vDecode4bpp */
@@ -126,14 +122,14 @@ vDecode4bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
  * vDecode8bpp - decode an uncompressed 8 bits per pixel image
  */
 static void
-vDecode8bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
+vDecode8bpp(FILE *pInFile, FILE *pOutFile, const imagedata_type *pImg)
 {
 	size_t	tPadding;
 	int	iX, iY, iByte;
 
 	DBG_MSG("vDecode8bpp");
 
-	fail(pFile == NULL);
+	fail(pInFile == NULL);
 	fail(pOutFile == NULL);
 	fail(pImg == NULL);
 	fail(pImg->iColorsUsed < 1 || pImg->iColorsUsed > 256);
@@ -141,20 +137,18 @@ vDecode8bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 	DBG_DEC(pImg->iWidth);
 	DBG_DEC(pImg->iHeight);
 
-	tPadding = (size_t)(MakeFour(pImg->iWidth) - pImg->iWidth);
+	tPadding = (size_t)(ROUND4(pImg->iWidth) - pImg->iWidth);
 
 	for (iY = 0; iY < pImg->iHeight; iY++) {
 		for (iX = 0; iX < pImg->iWidth; iX++) {
-			iByte = iNextByte(pFile);
+			iByte = iNextByte(pInFile);
 			if (iByte == EOF) {
-				DBG_DEC(iY);
-				DBG_DEC(iX);
 				vASCII85EncodeByte(pOutFile, EOF);
 				return;
 			}
 			vASCII85EncodeByte(pOutFile, iByte);
 		}
-		(void)iSkipBytes(pFile, tPadding);
+		(void)tSkipBytes(pInFile, tPadding);
 	}
 	vASCII85EncodeByte(pOutFile, EOF);
 } /* end of vDecode8bpp */
@@ -163,14 +157,14 @@ vDecode8bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
  * vDecode24bpp - decode an uncompressed 24 bits per pixel image
  */
 static void
-vDecode24bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
+vDecode24bpp(FILE *pInFile, FILE *pOutFile, const imagedata_type *pImg)
 {
 	size_t	tPadding;
 	int	iX, iY, iBlue, iGreen, iRed, iTripleWidth;
 
 	DBG_MSG("vDecode24bpp");
 
-	fail(pFile == NULL);
+	fail(pInFile == NULL);
 	fail(pOutFile == NULL);
 	fail(pImg == NULL);
 	fail(!pImg->bColorImage);
@@ -179,26 +173,23 @@ vDecode24bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 	DBG_DEC(pImg->iHeight);
 
 	iTripleWidth = pImg->iWidth * 3;
-	tPadding = (size_t)(MakeFour(iTripleWidth) - iTripleWidth);
+	tPadding = (size_t)(ROUND4(iTripleWidth) - iTripleWidth);
 
 	for (iY = 0; iY < pImg->iHeight; iY++) {
-		for (iX = 0; iX < iTripleWidth; iX += 3) {
+		for (iX = 0; iX < pImg->iWidth; iX++) {
 			/* Change from BGR order to RGB order */
-			iBlue = iNextByte(pFile);
+			iBlue = iNextByte(pInFile);
 			if (iBlue == EOF) {
-				iGreen = EOF;
-				iRed = EOF;
-			} else {
-				iGreen = iNextByte(pFile);
-				if (iGreen == EOF) {
-					iRed = EOF;
-				} else {
-					iRed = iNextByte(pFile);
-				}
+				vASCII85EncodeByte(pOutFile, EOF);
+				return;
 			}
-			if (iBlue == EOF || iGreen == EOF || iRed == EOF) {
-				DBG_DEC(iY);
-				DBG_DEC(iX);
+			iGreen = iNextByte(pInFile);
+			if (iGreen == EOF) {
+				vASCII85EncodeByte(pOutFile, EOF);
+				return;
+			}
+			iRed = iNextByte(pInFile);
+			if (iRed == EOF) {
 				vASCII85EncodeByte(pOutFile, EOF);
 				return;
 			}
@@ -206,7 +197,7 @@ vDecode24bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 			vASCII85EncodeByte(pOutFile, iGreen);
 			vASCII85EncodeByte(pOutFile, iBlue);
 		}
-		(void)iSkipBytes(pFile, tPadding);
+		(void)tSkipBytes(pInFile, tPadding);
 	}
 	vASCII85EncodeByte(pOutFile, EOF);
 } /* end of vDecode24bpp */
@@ -215,14 +206,14 @@ vDecode24bpp(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
  * vDecodeRle4 - decode a RLE compressed 4 bits per pixel image
  */
 static void
-vDecodeRle4(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
+vDecodeRle4(FILE *pInFile, FILE *pOutFile, const imagedata_type *pImg)
 {
-	int	iX, iY, iN, iByte, iTmp, iRunLength, iHalfRunLength, iUse;
+	int	iX, iY, iByte, iTmp, iRunLength, iRun;
 	BOOL	bEOF, bEOL;
 
 	DBG_MSG("vDecodeRle4");
 
-	fail(pFile == NULL);
+	fail(pInFile == NULL);
 	fail(pOutFile == NULL);
 	fail(pImg == NULL);
 	fail(pImg->iColorsUsed < 1 || pImg->iColorsUsed > 16);
@@ -234,69 +225,76 @@ vDecodeRle4(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 
 	for (iY =  0; iY < pImg->iHeight && !bEOF; iY++) {
 		bEOL = FALSE;
+		iX = 0;
 		while (!bEOL) {
-			iRunLength = iNextByte(pFile);
-			if (iRunLength == 0) {
-				/* Literal or escape */
-				iRunLength = iNextByte(pFile);
-				switch (iRunLength) {
-				case 0:	/* End of line escape */
-					bEOL = TRUE;
-					break;
-				case 1:	/* End of file escape */
-					bEOF = TRUE;
-					bEOL = TRUE;
-					break;
-				case 2:	/* Delta escape */
-					DBG_MSG("Encountered delta escape");
-					bEOF = TRUE;
-					bEOL = TRUE;
-					break;
-				default:/* Literal packet*/
-					iHalfRunLength = (iRunLength + 1) / 2;
-					for (iX = 0;
-					     iX < iHalfRunLength;
-					     iX++) {
-						if (iX == iHalfRunLength - 1 &&
-						    odd(iRunLength)) {
-							iUse = 1;
-						} else {
-							iUse = 2;
-						}
-						iByte = iNextByte(pFile);
-						for (iN = 0; iN < iUse; iN++) {
-							if (odd(iN)) {
-								iTmp =
-								iByte & 0x0f;
-							} else {
-								iTmp =
-							(iByte & 0xf0) / 16;
-							}
-							vASCII85EncodeByte(
-								pOutFile, iTmp);
-						}
-					}
-					if (odd(iHalfRunLength)) {
-						(void)iNextByte(pFile);
-					}
-					break;
-				}
-			} else {
+			iRunLength = iNextByte(pInFile);
+			if (iRunLength == EOF) {
+				vASCII85EncodeByte(pOutFile, EOF);
+				return;
+			}
+			if (iRunLength != 0) {
 				/*
 				 * Encoded packet:
 				 * RunLength pixels, all the "same" value
 				 */
-				iByte = iNextByte(pFile);
-				for (iX = 0; iX < iRunLength; iX++) {
-					if (odd(iX)) {
+				iByte = iNextByte(pInFile);
+				if (iByte == EOF) {
+					vASCII85EncodeByte(pOutFile, EOF);
+					return;
+				}
+				for (iRun = 0; iRun < iRunLength; iRun++) {
+					if (odd(iRun)) {
 						iTmp = iByte & 0x0f;
 					} else {
 						iTmp = (iByte & 0xf0) / 16;
 					}
-					vASCII85EncodeByte(pOutFile, iTmp);
+					if (iX < pImg->iWidth) {
+						vASCII85EncodeByte(pOutFile, iTmp);
+					}
+					iX++;
+				}
+				continue;
+			}
+			/* Literal or escape */
+			iRunLength = iNextByte(pInFile);
+			if (iRunLength == EOF) {
+				vASCII85EncodeByte(pOutFile, EOF);
+				return;
+			}
+			if (iRunLength == 0) {		/* End of line escape */
+				bEOL = TRUE;
+			} else if (iRunLength == 1) {	/* End of file escape */
+				bEOF = TRUE;
+				bEOL = TRUE;
+			} else if (iRunLength == 2) {	/* Delta escape */
+				DBG_MSG("RLE4: encountered delta escape");
+				bEOF = TRUE;
+				bEOL = TRUE;
+			} else {			/* Literal packet */
+				iByte = 0;
+				for (iRun = 0; iRun < iRunLength; iRun++) {
+					if (odd(iRun)) {
+						iTmp = iByte & 0x0f;
+					} else {
+						iByte = iNextByte(pInFile);
+						if (iByte == EOF) {
+							vASCII85EncodeByte(pOutFile, EOF);
+							return;
+						}
+						iTmp = (iByte & 0xf0) / 16;
+					}
+					if (iX < pImg->iWidth) {
+						vASCII85EncodeByte(pOutFile, iTmp);
+					}
+					iX++;
+				}
+				/* Padding if the number of bytes is odd */
+				if (odd((iRunLength + 1) / 2)) {
+					(void)tSkipBytes(pInFile, 1);
 				}
 			}
 		}
+		DBG_DEC_C(iX != pImg->iWidth, iX);
 	}
 	vASCII85EncodeByte(pOutFile, EOF);
 } /* end of vDecodeRle4 */
@@ -305,14 +303,14 @@ vDecodeRle4(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
  * vDecodeRle8 - decode a RLE compressed 8 bits per pixel image
  */
 static void
-vDecodeRle8(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
+vDecodeRle8(FILE *pInFile, FILE *pOutFile, const imagedata_type *pImg)
 {
-	int	iX, iY, iByte, iRunLength;
+	int	iX, iY, iByte, iRunLength, iRun;
 	BOOL	bEOF, bEOL;
 
 	DBG_MSG("vDecodeRle8");
 
-	fail(pFile == NULL);
+	fail(pInFile == NULL);
 	fail(pOutFile == NULL);
 	fail(pImg == NULL);
 	fail(pImg->iColorsUsed < 1 || pImg->iColorsUsed > 256);
@@ -324,46 +322,65 @@ vDecodeRle8(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
 
 	for (iY = 0; iY < pImg->iHeight && !bEOF; iY++) {
 		bEOL = FALSE;
+		iX = 0;
 		while (!bEOL) {
-			iRunLength = iNextByte(pFile);
-			if (iRunLength == 0) {
-				/* Literal or escape */
-				iRunLength = iNextByte(pFile);
-				switch (iRunLength) {
-				case 0:	/* End of line escape */
-					bEOL = TRUE;
-					break;
-				case 1:	/* End of file escape */
-					bEOF = TRUE;
-					bEOL = TRUE;
-					break;
-				case 2:	/* Delta escape */
-					DBG_MSG("Encountered delta escape");
-					bEOF = TRUE;
-					bEOL = TRUE;
-					break;
-				default:/* Literal packet*/
-					for (iX = 0; iX < iRunLength; iX++) {
-						iByte = iNextByte(pFile);
-						vASCII85EncodeByte(pOutFile,
-									iByte);
-					}
-					if (odd(iRunLength)) {
-						(void)iNextByte(pFile);
-					}
-					break;
-				}
-			} else {
+			iRunLength = iNextByte(pInFile);
+			if (iRunLength == EOF) {
+				vASCII85EncodeByte(pOutFile, EOF);
+				return;
+			}
+			if (iRunLength != 0) {
 				/*
 				 * Encoded packet:
 				 * RunLength pixels, all the same value
 				 */
-				iByte = iNextByte(pFile);
-				for (iX = 0; iX < iRunLength; iX++) {
-					vASCII85EncodeByte(pOutFile, iByte);
+				iByte = iNextByte(pInFile);
+				if (iByte == EOF) {
+					vASCII85EncodeByte(pOutFile, EOF);
+					return;
+				}
+				for (iRun = 0; iRun < iRunLength; iRun++) {
+					if (iX < pImg->iWidth) {
+						vASCII85EncodeByte(pOutFile, iByte);
+					}
+					iX++;
+				}
+				continue;
+			}
+			/* Literal or escape */
+			iRunLength = iNextByte(pInFile);
+			if (iRunLength == EOF) {
+				vASCII85EncodeByte(pOutFile, EOF);
+				return;
+			}
+			if (iRunLength == 0) {		/* End of line escape */
+				bEOL = TRUE;
+			} else if (iRunLength == 1) {	/* End of file escape */
+				bEOF = TRUE;
+				bEOL = TRUE;
+			} else if (iRunLength == 2) {	/* Delta escape */
+				DBG_MSG("RLE8: encountered delta escape");
+				bEOF = TRUE;
+				bEOL = TRUE;
+			} else {			/* Literal packet */
+				for (iRun = 0; iRun < iRunLength; iRun++) {
+					iByte = iNextByte(pInFile);
+					if (iByte == EOF) {
+						vASCII85EncodeByte(pOutFile, EOF);
+						return;
+					}
+					if (iX < pImg->iWidth) {
+						vASCII85EncodeByte(pOutFile, iByte);
+					}
+					iX++;
+				}
+				/* Padding if the number of bytes is odd */
+				if (odd(iRunLength)) {
+					(void)tSkipBytes(pInFile, 1);
 				}
 			}
 		}
+		DBG_DEC_C(iX != pImg->iWidth, iX);
 	}
 	vASCII85EncodeByte(pOutFile, EOF);
 } /* end of vDecodeRle8 */
@@ -372,53 +389,53 @@ vDecodeRle8(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
  * vDecodeDIB - decode a dib picture
  */
 static void
-vDecodeDIB(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
+vDecodeDIB(FILE *pInFile, FILE *pOutFile, const imagedata_type *pImg)
 {
 	size_t	tHeaderSize;
 
-	fail(pFile == NULL);
+	fail(pInFile == NULL);
 	fail(pOutFile == NULL);
 	fail(pImg == NULL);
 
 	/* Skip the bitmap info header */
-	tHeaderSize = (size_t)ulNextLong(pFile);
-	(void)iSkipBytes(pFile, tHeaderSize - 4);
+	tHeaderSize = (size_t)ulNextLong(pInFile);
+	(void)tSkipBytes(pInFile, tHeaderSize - 4);
 	/* Skip the colortable */
-	if (pImg->iBitsPerComponent <= 8) {
-		(void)iSkipBytes(pFile,
+	if (pImg->uiBitsPerComponent <= 8) {
+		(void)tSkipBytes(pInFile,
 			(size_t)(pImg->iColorsUsed *
 			 ((tHeaderSize > 12) ? 4 : 3)));
 	}
 
-	switch (pImg->iBitsPerComponent) {
+	switch (pImg->uiBitsPerComponent) {
 	case 1:
 		fail(pImg->eCompression != compression_none);
-		vDecode1bpp(pFile, pOutFile, pImg);
+		vDecode1bpp(pInFile, pOutFile, pImg);
 		break;
 	case 4:
 		fail(pImg->eCompression != compression_none &&
 				pImg->eCompression != compression_rle4);
 		if (pImg->eCompression == compression_rle4) {
-			vDecodeRle4(pFile, pOutFile, pImg);
+			vDecodeRle4(pInFile, pOutFile, pImg);
 		} else {
-			vDecode4bpp(pFile, pOutFile, pImg);
+			vDecode4bpp(pInFile, pOutFile, pImg);
 		}
 		break;
 	case 8:
 		fail(pImg->eCompression != compression_none &&
 				pImg->eCompression != compression_rle8);
 		if (pImg->eCompression == compression_rle8) {
-			vDecodeRle8(pFile, pOutFile, pImg);
+			vDecodeRle8(pInFile, pOutFile, pImg);
 		} else {
-			vDecode8bpp(pFile, pOutFile, pImg);
+			vDecode8bpp(pInFile, pOutFile, pImg);
 		}
 		break;
 	case 24:
 		fail(pImg->eCompression != compression_none);
-		vDecode24bpp(pFile, pOutFile, pImg);
+		vDecode24bpp(pInFile, pOutFile, pImg);
 		break;
 	default:
-		DBG_DEC(pImg->iBitsPerComponent);
+		DBG_DEC(pImg->uiBitsPerComponent);
 		break;
 	}
 } /* end of vDecodeDIB */
@@ -428,14 +445,15 @@ vDecodeDIB(FILE *pFile, FILE *pOutFile, const imagedata_type *pImg)
  * vCopy2File
  */
 static void
-vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
+vCopy2File(FILE *pInFile, ULONG ulFileOffset, size_t tPictureLen)
 {
 	static int	iPicCounter = 0;
 	FILE	*pOutFile;
-	int	iIndex, iTmp;
+	size_t	tIndex;
+	int	iTmp;
 	char	szFilename[30];
 
-	if (!bSetDataOffset(pFile, lFileOffset)) {
+	if (!bSetDataOffset(pInFile, ulFileOffset)) {
 		return;
 	}
 
@@ -452,8 +470,8 @@ vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
 			break;
 		}
 	}
-	for (iIndex = 0; iIndex < iPictureLen; iIndex++) {
-		iTmp = iNextByte(pFile);
+	for (tIndex = 0; tIndex < tPictureLen; tIndex++) {
+		iTmp = iNextByte(pInFile);
 		if (putc(iTmp, pOutFile) == EOF) {
 			break;
 		}
@@ -470,20 +488,21 @@ vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
  * return TRUE when sucessful, otherwise FALSE
  */
 BOOL
-bTranslateDIB(diagram_type *pDiag, FILE *pFile,
-		long lFileOffset, const imagedata_type *pImg)
+bTranslateDIB(diagram_type *pDiag, FILE *pInFile,
+		ULONG ulFileOffset, const imagedata_type *pImg)
 {
 #if defined(DEBUG)
-	vCopy2File(pFile, lFileOffset, pImg->iLength - pImg->iPosition);
+	fail(pImg->tPosition > pImg->tLength);
+	vCopy2File(pInFile, ulFileOffset, pImg->tLength - pImg->tPosition);
 #endif /* DEBUG */
 
 	/* Seek to start position of DIB data */
-	if (!bSetDataOffset(pFile, lFileOffset)) {
+	if (!bSetDataOffset(pInFile, ulFileOffset)) {
 		return FALSE;
 	}
 
 	vImagePrologue(pDiag, pImg);
-	vDecodeDIB(pFile, pDiag->pOutFile, pImg);
+	vDecodeDIB(pInFile, pDiag->pOutFile, pImg);
 	vImageEpilogue(pDiag);
 
 	return TRUE;

@@ -1,6 +1,6 @@
 /*
  * tabstops.c
- * Copyright (C) 1999,2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1999-2002 A.J. van Os; Released under GPL
  *
  * Description:
  * Read the tab stop information from a MS Word file
@@ -9,33 +9,90 @@
 #include <stdio.h>
 #include "antiword.h"
 
-static long	lDefaultTabWidth = 36000;	/* In millipoints */
+#define HALF_INCH	36000L	/* In millipoints */
 
+static long	lDefaultTabWidth = HALF_INCH;
+
+
+/*
+ * vSet0DefaultTabWidth -
+ */
+static void
+vSet0DefaultTabWidth(const UCHAR *aucHeader)
+{
+	USHORT	usTmp;
+
+	fail(aucHeader == NULL);
+
+	usTmp = usGetWord(0x70, aucHeader); /* dxaTab */
+	DBG_DEC(usTmp);
+	lDefaultTabWidth = usTmp == 0 ? HALF_INCH : lTwips2MilliPoints(usTmp);
+	DBG_DEC(lDefaultTabWidth);
+} /* end of vSet0DefaultTabWidth */
+
+/*
+ * vSet2DefaultTabWidth -
+ */
+static void
+vSet2DefaultTabWidth(FILE *pFile, const UCHAR *aucHeader)
+{
+	UCHAR	*aucBuffer;
+	ULONG	ulBeginDocpInfo;
+	size_t	tDocpInfoLen;
+	USHORT	usTmp;
+
+	fail(pFile == NULL || aucHeader == NULL);
+
+	ulBeginDocpInfo = ulGetLong(0x112, aucHeader); /* fcDop */
+	DBG_HEX(ulBeginDocpInfo);
+	tDocpInfoLen = (size_t)usGetWord(0x116, aucHeader); /* cbDop */
+	DBG_DEC(tDocpInfoLen);
+	if (tDocpInfoLen < 12) {
+		DBG_MSG("No TAB information");
+		return;
+	}
+
+	aucBuffer = xmalloc(tDocpInfoLen);
+	if (!bReadBytes(aucBuffer, tDocpInfoLen, ulBeginDocpInfo, pFile)) {
+		aucBuffer = xfree(aucBuffer);
+		return;
+	}
+	usTmp = usGetWord(0x0a, aucBuffer); /* dxaTab */
+	lDefaultTabWidth = usTmp == 0 ? HALF_INCH : lTwips2MilliPoints(usTmp);
+	DBG_DEC(lDefaultTabWidth);
+	aucBuffer = xfree(aucBuffer);
+} /* end of vSet2DefaultTabWidth */
 
 /*
  * vSet6DefaultTabWidth -
  */
 static void
-vSet6DefaultTabWidth(FILE *pFile, int iStartBlock,
-	const int *aiBBD, size_t tBBDLen,
-	const unsigned char *aucHeader)
+vSet6DefaultTabWidth(FILE *pFile, ULONG ulStartBlock,
+	const ULONG *aulBBD, size_t tBBDLen, const UCHAR *aucHeader)
 {
-	unsigned char	*aucBuffer;
-	size_t		tBeginDocpInfo, tDocpInfoLen;
+	UCHAR	*aucBuffer;
+	ULONG	ulBeginDocpInfo;
+	size_t	tDocpInfoLen;
+	USHORT	usTmp;
 
-	tBeginDocpInfo = (size_t)ulGetLong(0x150, aucHeader);
-	DBG_HEX(tBeginDocpInfo);
-	tDocpInfoLen = (size_t)ulGetLong(0x154, aucHeader);
+	ulBeginDocpInfo = ulGetLong(0x150, aucHeader); /* fcDop */
+	DBG_HEX(ulBeginDocpInfo);
+	tDocpInfoLen = (size_t)ulGetLong(0x154, aucHeader); /* lcbDop */
 	DBG_DEC(tDocpInfoLen);
+	if (tDocpInfoLen < 12) {
+		DBG_MSG("No TAB information");
+		return;
+	}
 
 	aucBuffer = xmalloc(tDocpInfoLen);
-	if (!bReadBuffer(pFile, iStartBlock,
-			aiBBD, tBBDLen, BIG_BLOCK_SIZE,
-			aucBuffer, tBeginDocpInfo, tDocpInfoLen)) {
+	if (!bReadBuffer(pFile, ulStartBlock,
+			aulBBD, tBBDLen, BIG_BLOCK_SIZE,
+			aucBuffer, ulBeginDocpInfo, tDocpInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
 		return;
 	}
-	lDefaultTabWidth = lTwips2MilliPoints(usGetWord(0x0a, aucBuffer));
+	usTmp = usGetWord(0x0a, aucBuffer); /* dxaTab */
+	lDefaultTabWidth = usTmp == 0 ? HALF_INCH : lTwips2MilliPoints(usTmp);
 	DBG_DEC(lDefaultTabWidth);
 	aucBuffer = xfree(aucBuffer);
 } /* end of vSet6DefaultTabWidth */
@@ -45,56 +102,62 @@ vSet6DefaultTabWidth(FILE *pFile, int iStartBlock,
  */
 static void
 vSet8DefaultTabWidth(FILE *pFile, const pps_info_type *pPPS,
-	const int *aiBBD, size_t tBBDLen, const int *aiSBD, size_t tSBDLen,
-	const unsigned char *aucHeader)
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader)
 {
-        const int	*aiBlockDepot;
-	unsigned char	*aucBuffer;
-	long	lTableSize;
-	size_t	tBeginDocpInfo, tDocpInfoLen, tBlockDepotLen, tBlockSize;
-	int	iTableStartBlock;
-	unsigned short	usDocStatus;
+        const ULONG	*aulBlockDepot;
+	UCHAR	*aucBuffer;
+	ULONG	ulBeginDocpInfo;
+	ULONG	ulTableSize, ulTableStartBlock;
+	size_t	tDocpInfoLen, tBlockDepotLen, tBlockSize;
+	USHORT	usDocStatus, usTmp;
 
-	tBeginDocpInfo = (size_t)ulGetLong(0x192, aucHeader);
-	DBG_HEX(tBeginDocpInfo);
-	tDocpInfoLen = (size_t)ulGetLong(0x196, aucHeader);
+	ulBeginDocpInfo = ulGetLong(0x192, aucHeader); /* fcDop */
+	DBG_HEX(ulBeginDocpInfo);
+	tDocpInfoLen = (size_t)ulGetLong(0x196, aucHeader); /* lcbDop */
 	DBG_DEC(tDocpInfoLen);
+	if (tDocpInfoLen < 12) {
+		DBG_MSG("No TAB information");
+		return;
+	}
 
 	/* Use 0Table or 1Table? */
 	usDocStatus = usGetWord(0x0a, aucHeader);
 	if (usDocStatus & BIT(9)) {
-		iTableStartBlock = pPPS->t1Table.iSb;
-		lTableSize = pPPS->t1Table.lSize;
+		ulTableStartBlock = pPPS->t1Table.ulSB;
+		ulTableSize = pPPS->t1Table.ulSize;
 	} else {
-		iTableStartBlock = pPPS->t0Table.iSb;
-		lTableSize = pPPS->t0Table.lSize;
+		ulTableStartBlock = pPPS->t0Table.ulSB;
+		ulTableSize = pPPS->t0Table.ulSize;
 	}
-	DBG_DEC(iTableStartBlock);
-	if (iTableStartBlock < 0) {
-		DBG_DEC(iTableStartBlock);
+	DBG_DEC(ulTableStartBlock);
+	if (ulTableStartBlock == 0) {
+		DBG_DEC(ulTableStartBlock);
 		DBG_MSG("No TAB information");
 		return;
 	}
-	DBG_HEX(lTableSize);
-	if (lTableSize < MIN_SIZE_FOR_BBD_USE) {
+	DBG_HEX(ulTableSize);
+	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
 		/* Use the Small Block Depot */
-		aiBlockDepot = aiSBD;
+		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
 		tBlockSize = SMALL_BLOCK_SIZE;
 	} else {
 		/* Use the Big Block Depot */
-		aiBlockDepot = aiBBD;
+		aulBlockDepot = aulBBD;
 		tBlockDepotLen = tBBDLen;
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tDocpInfoLen);
-	if (!bReadBuffer(pFile, iTableStartBlock,
-			aiBlockDepot, tBlockDepotLen, tBlockSize,
-			aucBuffer, tBeginDocpInfo, tDocpInfoLen)) {
+	if (!bReadBuffer(pFile, ulTableStartBlock,
+			aulBlockDepot, tBlockDepotLen, tBlockSize,
+			aucBuffer, ulBeginDocpInfo, tDocpInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
 		return;
 	}
-	lDefaultTabWidth = lTwips2MilliPoints(usGetWord(0x0a, aucBuffer));
+	usTmp = usGetWord(0x0a, aucBuffer); /* dxaTab */
+	lDefaultTabWidth = usTmp == 0 ? HALF_INCH : lTwips2MilliPoints(usTmp);
 	DBG_DEC(lDefaultTabWidth);
 	aucBuffer = xfree(aucBuffer);
 } /* end of vSet8DefaultTabWidth */
@@ -104,22 +167,38 @@ vSet8DefaultTabWidth(FILE *pFile, const pps_info_type *pPPS,
  */
 void
 vSetDefaultTabWidth(FILE *pFile, const pps_info_type *pPPS,
-	const int *aiBBD, size_t tBBDLen, const int *aiSBD, size_t tSBDLen,
-	const unsigned char *aucHeader, int iWordVersion)
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader, int iWordVersion)
 {
-	fail(pFile == NULL || pPPS == NULL || aucHeader == NULL);
-	fail(iWordVersion < 6 || iWordVersion > 8);
-	fail(aiBBD == NULL || aiSBD == NULL);
+	fail(pFile == NULL && iWordVersion >= 1);
+	fail(pPPS == NULL && iWordVersion >= 6);
+	fail(aulBBD == NULL && tBBDLen != 0);
+	fail(aulSBD == NULL && tSBDLen != 0);
+	fail(aucHeader == NULL);
+
+	/* Reset to the default default value */
+	lDefaultTabWidth = HALF_INCH;
 
 	switch (iWordVersion) {
+	case 0:
+		vSet0DefaultTabWidth(aucHeader);
+		break;
+	case 1:
+	case 2:
+		vSet2DefaultTabWidth(pFile, aucHeader);
+		break;
+	case 4:
+	case 5:
+		break;
 	case 6:
 	case 7:
-		vSet6DefaultTabWidth(pFile, pPPS->tWordDocument.iSb,
-				aiBBD, tBBDLen, aucHeader);
+		vSet6DefaultTabWidth(pFile, pPPS->tWordDocument.ulSB,
+				aulBBD, tBBDLen, aucHeader);
 		break;
 	case 8:
 		vSet8DefaultTabWidth(pFile, pPPS,
-				aiBBD, tBBDLen, aiSBD, tSBDLen, aucHeader);
+				aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 		break;
 	default:
 		werr(0, "Sorry, no TAB information");

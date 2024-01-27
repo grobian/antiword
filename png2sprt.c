@@ -19,7 +19,7 @@
  */
 BOOL
 bTranslatePNG(diagram_type *pDiag, FILE *pFile,
-	long lFileOffset, int iPictureLen, const imagedata_type *pImg)
+	ULONG ulFileOffset, size_t tPictureLen, const imagedata_type *pImg)
 {
 	/* PNG is not supported yet */
 	return bAddDummyImage(pDiag, pImg);

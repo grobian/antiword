@@ -1,6 +1,6 @@
 /*
  * imgtrans.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000-2002 A.J. van Os; Released under GPL
  *
  * Description:
  * Generic functions to translate Word images
@@ -19,7 +19,7 @@
  */
 BOOL
 bTranslateImage(diagram_type *pDiag, FILE *pFile, BOOL bMinimalInformation,
-	long lFileOffsetImage, const imagedata_type *pImg)
+	ULONG ulFileOffsetImage, const imagedata_type *pImg)
 {
 	options_type	tOptions;
 
@@ -27,10 +27,10 @@ bTranslateImage(diagram_type *pDiag, FILE *pFile, BOOL bMinimalInformation,
 
 	fail(pDiag == NULL);
 	fail(pFile == NULL);
-	fail(lFileOffsetImage < 0);
+	fail(ulFileOffsetImage == FC_INVALID);
 	fail(pImg == NULL);
-	fail(pImg->iHorizontalSize <= 0);
-	fail(pImg->iVerticalSize <= 0);
+	fail(pImg->iHorSizeScaled <= 0);
+	fail(pImg->iVerSizeScaled <= 0);
 
 	vGetOptions(&tOptions);
 	fail(tOptions.eImageLevel == level_no_images);
@@ -42,24 +42,25 @@ bTranslateImage(diagram_type *pDiag, FILE *pFile, BOOL bMinimalInformation,
 	switch (pImg->eImageType) {
 	case imagetype_is_dib:
 		return bTranslateDIB(pDiag, pFile,
-				lFileOffsetImage + pImg->iPosition,
+				ulFileOffsetImage + pImg->tPosition,
 				pImg);
 	case imagetype_is_jpeg:
 		return bTranslateJPEG(pDiag, pFile,
-				lFileOffsetImage + pImg->iPosition,
-				pImg->iLength - pImg->iPosition,
+				ulFileOffsetImage + pImg->tPosition,
+				pImg->tLength - pImg->tPosition,
 				pImg);
 	case imagetype_is_png:
 		if (tOptions.eImageLevel == level_ps_2) {
 			return bAddDummyImage(pDiag, pImg);
 		}
 		return bTranslatePNG(pDiag, pFile,
-				lFileOffsetImage + pImg->iPosition,
-				pImg->iLength - pImg->iPosition,
+				ulFileOffsetImage + pImg->tPosition,
+				pImg->tLength - pImg->tPosition,
 				pImg);
 	case imagetype_is_emf:
 	case imagetype_is_wmf:
 	case imagetype_is_pict:
+	case imagetype_is_external:
 		/* FIXME */
 		return bAddDummyImage(pDiag, pImg);
 	case imagetype_is_unknown:

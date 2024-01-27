@@ -1,6 +1,6 @@
 /*
  * postscript.c
- * Copyright (C) 1999,2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1999-2003 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Functions to deal with the PostScript format
@@ -13,166 +13,166 @@
  * The credit should go to him, but all the bugs are mine.
  */
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <string.h>
 #include "version.h"
 #include "antiword.h"
 
-/* The output must be in PostScript */
-static BOOL		bUsePostScript = FALSE;
 /* The character set */
 static encoding_type	eEncoding = encoding_neutral;
 /* The image level */
 static image_level_enum	eImageLevel = level_default;
 /* The output must use landscape orientation */
 static BOOL		bUseLandscape = FALSE;
-/* The height of a PostScript page (in DrawUnits) */
+/* The height and width of a PostScript page (in DrawUnits) */
 static long		lPageHeight = LONG_MAX;
-/* The net width of a PostScript page (in points) */
-static double		dNetPageWidth = (double)ULONG_MAX;
+static long		lPageWidth = LONG_MAX;
 /* Current time for a PS header */
 static const char	*szCreationDate = NULL;
 /* Current creator for a PS header */
 static const char	*szCreator = NULL;
 /* Current font information */
 static draw_fontref	tFontRefCurr = (draw_fontref)-1;
-static int		iFontsizeCurr = -1;
-static int		iColorCurr = -1;
+static USHORT		usFontSizeCurr = 0;
+static int		iFontColorCurr = -1;
 /* Current vertical position information */
 static long		lYtopCurr = -1;
 /* PostScript page counter */
-static int	iPageCount = 0;
+static int		iPageCount = 0;
 /* Image counter */
-static int	iImageCount = 0;
+static int		iImageCount = 0;
 
-static char iso_8859_1_data[] = { "\
-/newcodes	% ISO-8859-1 character encodings\n\
-[\n\
-160/space 161/exclamdown 162/cent 163/sterling 164/currency\n\
-165/yen 166/brokenbar 167/section 168/dieresis 169/copyright\n\
-170/ordfeminine 171/guillemotleft 172/logicalnot 173/hyphen 174/registered\n\
-175/macron 176/degree 177/plusminus 178/twosuperior 179/threesuperior\n\
-180/acute 181/mu 182/paragraph 183/periodcentered 184/cedilla\n\
-185/onesuperior 186/ordmasculine 187/guillemotright 188/onequarter\n\
-189/onehalf 190/threequarters 191/questiondown 192/Agrave 193/Aacute\n\
-194/Acircumflex 195/Atilde 196/Adieresis 197/Aring 198/AE 199/Ccedilla\n\
-200/Egrave 201/Eacute 202/Ecircumflex 203/Edieresis 204/Igrave 205/Iacute\n\
-206/Icircumflex 207/Idieresis 208/Eth 209/Ntilde 210/Ograve 211/Oacute\n\
-212/Ocircumflex 213/Otilde 214/Odieresis 215/multiply 216/Oslash\n\
-217/Ugrave 218/Uacute 219/Ucircumflex 220/Udieresis 221/Yacute 222/Thorn\n\
-223/germandbls 224/agrave 225/aacute 226/acircumflex 227/atilde\n\
-228/adieresis 229/aring 230/ae 231/ccedilla 232/egrave 233/eacute\n\
-234/ecircumflex 235/edieresis 236/igrave 237/iacute 238/icircumflex\n\
-239/idieresis 240/eth 241/ntilde 242/ograve 243/oacute 244/ocircumflex\n\
-245/otilde 246/odieresis 247/divide 248/oslash 249/ugrave 250/uacute\n\
-251/ucircumflex 252/udieresis 253/yacute 254/thorn 255/ydieresis\n\
-] bind def\n\
-\n\
-/reencdict 12 dict def\n\
-\n\
-" };
+static const char *iso_8859_1_data[] = {
+"/newcodes	% ISO-8859-1 character encodings",
+"[",
+"140/ellipsis 141/trademark 142/perthousand 143/bullet",
+"144/quoteleft 145/quoteright 146/guilsinglleft 147/guilsinglright",
+"148/quotedblleft 149/quotedblright 150/quotedblbase 151/endash 152/emdash",
+"153/minus 154/OE 155/oe 156/dagger 157/daggerdbl 158/fi 159/fl",
+"160/space 161/exclamdown 162/cent 163/sterling 164/currency",
+"165/yen 166/brokenbar 167/section 168/dieresis 169/copyright",
+"170/ordfeminine 171/guillemotleft 172/logicalnot 173/hyphen 174/registered",
+"175/macron 176/degree 177/plusminus 178/twosuperior 179/threesuperior",
+"180/acute 181/mu 182/paragraph 183/periodcentered 184/cedilla",
+"185/onesuperior 186/ordmasculine 187/guillemotright 188/onequarter",
+"189/onehalf 190/threequarters 191/questiondown 192/Agrave 193/Aacute",
+"194/Acircumflex 195/Atilde 196/Adieresis 197/Aring 198/AE 199/Ccedilla",
+"200/Egrave 201/Eacute 202/Ecircumflex 203/Edieresis 204/Igrave 205/Iacute",
+"206/Icircumflex 207/Idieresis 208/Eth 209/Ntilde 210/Ograve 211/Oacute",
+"212/Ocircumflex 213/Otilde 214/Odieresis 215/multiply 216/Oslash",
+"217/Ugrave 218/Uacute 219/Ucircumflex 220/Udieresis 221/Yacute 222/Thorn",
+"223/germandbls 224/agrave 225/aacute 226/acircumflex 227/atilde",
+"228/adieresis 229/aring 230/ae 231/ccedilla 232/egrave 233/eacute",
+"234/ecircumflex 235/edieresis 236/igrave 237/iacute 238/icircumflex",
+"239/idieresis 240/eth 241/ntilde 242/ograve 243/oacute 244/ocircumflex",
+"245/otilde 246/odieresis 247/divide 248/oslash 249/ugrave 250/uacute",
+"251/ucircumflex 252/udieresis 253/yacute 254/thorn 255/ydieresis",
+"] bind def",
+"",
+"/reencdict 12 dict def",
+"",
+};
 
-static char iso_8859_2_data[] = { "\
-/newcodes	% ISO-8859-2 character encodings\n\
-[\n\
-160/space 161/Aogonek 162/breve 163/Lslash 164/currency 165/Lcaron\n\
-166/Sacute 167/section 168/dieresis 169/Scaron 170/Scommaaccent\n\
-171/Tcaron 172/Zacute 173/hyphen 174/Zcaron 175/Zdotaccent 176/degree\n\
-177/aogonek 178/ogonek 179/lslash 180/acute 181/lcaron 182/sacute\n\
-183/caron 184/cedilla 185/scaron 186/scommaaccent 187/tcaron\n\
-188/zacute 189/hungarumlaut 190/zcaron 191/zdotaccent 192/Racute\n\
-193/Aacute 194/Acircumflex 195/Abreve 196/Adieresis 197/Lacute\n\
-198/Cacute 199/Ccedilla 200/Ccaron 201/Eacute 202/Eogonek\n\
-203/Edieresis 204/Ecaron 205/Iacute 206/Icircumflex 207/Dcaron\n\
-208/Dcroat 209/Nacute 210/Ncaron 211/Oacute 212/Ocircumflex\n\
-213/Ohungarumlaut 214/Odieresis 215/multiply 216/Rcaron 217/Uring\n\
-218/Uacute 219/Uhungarumlaut 220/Udieresis 221/Yacute 222/Tcommaaccent\n\
-223/germandbls 224/racute 225/aacute 226/acircumflex 227/abreve\n\
-228/adieresis 229/lacute 230/cacute 231/ccedilla 232/ccaron 233/eacute\n\
-234/eogonek 235/edieresis 236/ecaron 237/iacute 238/icircumflex\n\
-239/dcaron 240/dcroat 241/nacute 242/ncaron 243/oacute 244/ocircumflex\n\
-245/ohungarumlaut 246/odieresis 247/divide 248/rcaron 249/uring\n\
-250/uacute 251/uhungarumlaut 252/udieresis 253/yacute 254/tcommaaccent\n\
-255/dotaccent\n\
-] bind def\n\
-\n\
-/reencdict 12 dict def\n\
-\n\
-" };
+static const char *iso_8859_2_data[] = {
+"/newcodes	% ISO-8859-2 character encodings",
+"[",
+"160/space 161/Aogonek 162/breve 163/Lslash 164/currency 165/Lcaron",
+"166/Sacute 167/section 168/dieresis 169/Scaron 170/Scommaaccent",
+"171/Tcaron 172/Zacute 173/hyphen 174/Zcaron 175/Zdotaccent 176/degree",
+"177/aogonek 178/ogonek 179/lslash 180/acute 181/lcaron 182/sacute",
+"183/caron 184/cedilla 185/scaron 186/scommaaccent 187/tcaron",
+"188/zacute 189/hungarumlaut 190/zcaron 191/zdotaccent 192/Racute",
+"193/Aacute 194/Acircumflex 195/Abreve 196/Adieresis 197/Lacute",
+"198/Cacute 199/Ccedilla 200/Ccaron 201/Eacute 202/Eogonek",
+"203/Edieresis 204/Ecaron 205/Iacute 206/Icircumflex 207/Dcaron",
+"208/Dcroat 209/Nacute 210/Ncaron 211/Oacute 212/Ocircumflex",
+"213/Ohungarumlaut 214/Odieresis 215/multiply 216/Rcaron 217/Uring",
+"218/Uacute 219/Uhungarumlaut 220/Udieresis 221/Yacute 222/Tcommaaccent",
+"223/germandbls 224/racute 225/aacute 226/acircumflex 227/abreve",
+"228/adieresis 229/lacute 230/cacute 231/ccedilla 232/ccaron 233/eacute",
+"234/eogonek 235/edieresis 236/ecaron 237/iacute 238/icircumflex",
+"239/dcaron 240/dcroat 241/nacute 242/ncaron 243/oacute 244/ocircumflex",
+"245/ohungarumlaut 246/odieresis 247/divide 248/rcaron 249/uring",
+"250/uacute 251/uhungarumlaut 252/udieresis 253/yacute 254/tcommaaccent",
+"255/dotaccent",
+"] bind def",
+"",
+"/reencdict 12 dict def",
+"",
+};
 
-static char iso_8859_x_func[] = { "\
-% change fonts using ISO-8859-x characters\n\
-/ChgFnt		% size psname natname => font\n\
-{\n\
-	dup FontDirectory exch known		% is re-encoded name known?\n\
-	{ exch pop }				% yes, get rid of long name\n\
-	{ dup 3 1 roll ReEncode } ifelse	% no, re-encode it\n\
-	findfont exch scalefont setfont\n\
-} bind def\n\
-\n\
-/ReEncode\n\
-{\n\
-reencdict begin\n\
-	/newname exch def\n\
-	/basename exch def\n\
-	/basedict basename findfont def\n\
-	/newfont basedict maxlength dict def\n\
-	basedict\n\
-	{ exch dup /FID ne\n\
-		{ dup /Encoding eq\n\
-			{ exch dup length array copy newfont 3 1 roll put }\n\
-			{ exch newfont 3 1 roll put } ifelse\n\
-		}\n\
-		{ pop pop } ifelse\n\
-	} forall\n\
-	newfont /FontName newname put\n\
-	newcodes aload pop newcodes length 2 idiv\n\
-	{ newfont /Encoding get 3 1 roll put } repeat\n\
-	newname newfont definefont pop\n\
-end\n\
-} bind def\n\
-\n\
-" };
+static const char *iso_8859_x_func[] = {
+"% change fonts using ISO-8859-x characters",
+"/ChgFnt		% size psname natname => font",
+"{",
+"	dup FontDirectory exch known		% is re-encoded name known?",
+"	{ exch pop }				% yes, get rid of long name",
+"	{ dup 3 1 roll ReEncode } ifelse	% no, re-encode it",
+"	findfont exch scalefont setfont",
+"} bind def",
+"",
+"/ReEncode",
+"{",
+"reencdict begin",
+"	/newname exch def",
+"	/basename exch def",
+"	/basedict basename findfont def",
+"	/newfont basedict maxlength dict def",
+"	basedict",
+"	{ exch dup /FID ne",
+"		{ dup /Encoding eq",
+"			{ exch dup length array copy newfont 3 1 roll put }",
+"			{ exch newfont 3 1 roll put } ifelse",
+"		}",
+"		{ pop pop } ifelse",
+"	} forall",
+"	newfont /FontName newname put",
+"	newcodes aload pop newcodes length 2 idiv",
+"	{ newfont /Encoding get 3 1 roll put } repeat",
+"	newname newfont definefont pop",
+"end",
+"} bind def",
+"",
+};
 
-static char misc_func[] = { "\
-% draw a line and show the string\n\
-/LineShow	% string linewidth movement\n\
-{\n\
-	gsave\n\
-		0 exch rmoveto\n\
-		setlinewidth\n\
-		dup\n\
-		stringwidth pop\n\
-		0 rlineto stroke\n\
-	grestore\n\
-	show\n\
-} bind def\n\
-\n\
-% begin an EPS file (level 2 and up)\n\
-/BeginEPSF\n\
-{\n\
-	/b4_Inc_state save def\n\
-	/dict_count countdictstack def\n\
-	/op_count count 1 sub def\n\
-	userdict begin\n\
-		/showpage { } def\n\
-		0 setgray 0 setlinecap\n\
-		1 setlinewidth 0 setlinejoin\n\
-		10 setmiterlimit [ ] 0 setdash newpath\n\
-		false setstrokeadjust false setoverprint\n\
-} bind def\n\
-\n\
-% end an EPS file\n\
-/EndEPSF {\n\
-	count op_count sub { pop } repeat\n\
-	countdictstack dict_count sub { end } repeat\n\
-	b4_Inc_state restore\n\
-} bind def\n\
-\n\
-" };
+static const char *misc_func[] = {
+"% draw a line and show the string",
+"/LineShow	% string linewidth movement",
+"{",
+"	gsave",
+"		0 exch rmoveto",
+"		setlinewidth",
+"		dup",
+"		stringwidth pop",
+"		0 rlineto stroke",
+"	grestore",
+"	show",
+"} bind def",
+"",
+"% begin an EPS file (level 2 and up)",
+"/BeginEPSF",
+"{",
+"	/b4_Inc_state save def",
+"	/dict_count countdictstack def",
+"	/op_count count 1 sub def",
+"	userdict begin",
+"		/showpage { } def",
+"		0 setgray 0 setlinecap",
+"		1 setlinewidth 0 setlinejoin",
+"		10 setmiterlimit [ ] 0 setdash newpath",
+"		false setstrokeadjust false setoverprint",
+"} bind def",
+"",
+"% end an EPS file",
+"/EndEPSF {",
+"	count op_count sub { pop } repeat",
+"	countdictstack dict_count sub { end } repeat",
+"	b4_Inc_state restore",
+"} bind def",
+"",
+};
 
 
 /*
@@ -197,7 +197,6 @@ static void
 vMove2NextPage(diagram_type *pDiag)
 {
 	fail(pDiag == NULL);
-	fail(!bUsePostScript);
 
 	fprintf(pDiag->pOutFile, "showpage\n");
 	iPageCount++;
@@ -208,9 +207,9 @@ vMove2NextPage(diagram_type *pDiag)
 } /* end of vMove2NextPage */
 
 /*
- * vMoveToPS - move to the given X,Y coordinates (Postscript)
+ * vMoveToPS - move to the specified X,Y coordinates
  *
- * Move the current position of the given diagram to its X,Y coordianates,
+ * Move the current position of the specified diagram to its X,Y coordinates,
  * start on a new page if needed
  */
 static void
@@ -235,38 +234,48 @@ vMoveToPS(diagram_type *pDiag, long lLastVerticalMovement)
 } /* end of vMoveToPS */
 
 /*
- * vPrologue - perform the PostScript initialisation
+ * vProloguePS - set options and perform the PostScript initialization
  */
-static void
-vPrologue(FILE *pOutFile, const char *szTask, const char *szFilename)
+void
+vProloguePS(diagram_type *pDiag,
+	const char *szTask, const char *szFilename,
+	const options_type *pOptions)
 {
-	options_type	tOptions;
+	FILE	*pOutFile;
 	const char	*szTmp;
 	time_t	tTime;
 
-	fail(pOutFile == NULL);
+	fail(pDiag == NULL);
+	fail(pDiag->pOutFile == NULL);
 	fail(szTask == NULL || szTask[0] == '\0');
+	fail(pOptions == NULL);
 
-	vGetOptions(&tOptions);
-	lPageHeight = lPoints2DrawUnits(tOptions.iPageHeight);
+	pOutFile = pDiag->pOutFile;
+
+	bUseLandscape = pOptions->bUseLandscape;
+	eEncoding = pOptions->eEncoding;
+	eImageLevel = pOptions->eImageLevel;
+
+	if (pOptions->iPageHeight == INT_MAX) {
+		lPageHeight = LONG_MAX;
+	} else {
+		lPageHeight = lPoints2DrawUnits(pOptions->iPageHeight);
+	}
 	DBG_DEC(lPageHeight);
-	dNetPageWidth = dDrawUnits2Points(
-		lPoints2DrawUnits(tOptions.iPageWidth) -
-		(PS_LEFT_MARGIN + PS_RIGHT_MARGIN));
-	DBG_FLT(dNetPageWidth);
-	bUsePostScript = tOptions.bUseOutlineFonts;
-	bUseLandscape = tOptions.bUseLandscape;
-	eEncoding = tOptions.eEncoding;
-	eImageLevel = tOptions.eImageLevel;
+	if (pOptions->iPageWidth == INT_MAX) {
+		lPageWidth = LONG_MAX;
+	} else {
+		lPageWidth = lPoints2DrawUnits(pOptions->iPageWidth);
+	}
+	DBG_DEC(lPageWidth);
 	tFontRefCurr = (draw_fontref)-1;
-	iFontsizeCurr = -1;
-	iColorCurr = -1;
+	usFontSizeCurr = 0;
+	iFontColorCurr = -1;
 	lYtopCurr = -1;
 	iImageCount = 0;
-
-	if (!bUsePostScript) {
-		return;
-	}
+	iPageCount = 0;
+	pDiag->lXleft = 0;
+	pDiag->lYtop = lPageHeight - PS_TOP_MARGIN;
 
 	szCreator = szTask;
 
@@ -280,7 +289,7 @@ vPrologue(FILE *pOutFile, const char *szTask, const char *szFilename)
 			szTmp = "unknown";
 		}
 	}
-	fprintf(pOutFile, "%%%%For: %s\n", szTmp);
+	fprintf(pOutFile, "%%%%For: %.50s\n", szTmp);
 	errno = 0;
 	tTime = time(NULL);
 	if (tTime == (time_t)-1 && errno != 0) {
@@ -294,32 +303,35 @@ vPrologue(FILE *pOutFile, const char *szTask, const char *szFilename)
 	fprintf(pOutFile, "%%%%CreationDate: %s", szCreationDate);
 	if (bUseLandscape) {
 		fprintf(pOutFile, "%%%%Orientation: Landscape\n");
-		fprintf(pOutFile, "%%%%BoundingBox: 0 0 %d %d\n",
-				tOptions.iPageHeight, tOptions.iPageWidth);
+		fprintf(pOutFile, "%%%%BoundingBox: 0 0 %.0f %.0f\n",
+				dDrawUnits2Points(lPageHeight),
+				dDrawUnits2Points(lPageWidth));
 	} else {
 		fprintf(pOutFile, "%%%%Orientation: Portrait\n");
-		fprintf(pOutFile, "%%%%BoundingBox: 0 0 %d %d\n",
-				tOptions.iPageWidth, tOptions.iPageHeight);
+		fprintf(pOutFile, "%%%%BoundingBox: 0 0 %.0f %.0f\n",
+				dDrawUnits2Points(lPageWidth),
+				dDrawUnits2Points(lPageHeight));
 	}
-} /* end of vPrologue */
+} /* end of vProloguePS */
 
 /*
- * vEpilogue - clean up after everything is done
+ * vEpiloguePS - clean up after everything is done
  */
-static void
-vEpilogue(FILE *pFile)
+void
+vEpiloguePS(diagram_type *pDiag)
 {
-	if (!bUsePostScript) {
-		fprintf(pFile, "\n");
-		return;
-	}
+	fail(pDiag == NULL);
+	fail(pDiag->pOutFile == NULL);
 
-	fprintf(pFile, "%%%%Trailer\n");
-	fprintf(pFile, "%%%%Pages: %d\n", iPageCount);
-	fprintf(pFile, "%%%%EOF\n");
+	if (pDiag->lYtop < lPageHeight - PS_TOP_MARGIN) {
+		fprintf(pDiag->pOutFile, "showpage\n");
+	}
+	fprintf(pDiag->pOutFile, "%%%%Trailer\n");
+	fprintf(pDiag->pOutFile, "%%%%Pages: %d\n", iPageCount);
+	fprintf(pDiag->pOutFile, "%%%%EOF\n");
 	szCreationDate = NULL;
 	szCreator = NULL;
-} /* end of vEpilogue */
+} /* end of vEpiloguePS */
 
 /*
  * vPrintPalette - print a postscript palette
@@ -339,11 +351,12 @@ vPrintPalette(FILE *pOutFile, const imagedata_type *pImg)
 		pImg->bColorImage ? "RGB" : "Gray", pImg->iColorsUsed - 1);
 	fprintf(pOutFile, "<");
 	for (iIndex = 0; iIndex < pImg->iColorsUsed; iIndex++) {
-		fprintf(pOutFile, "%02x", pImg->aucPalette[iIndex][0]);
+		fprintf(pOutFile, "%02x",
+				(unsigned int)pImg->aucPalette[iIndex][0]);
 		if (pImg->bColorImage) {
 			fprintf(pOutFile, "%02x%02x",
-				pImg->aucPalette[iIndex][1],
-				pImg->aucPalette[iIndex][2]);
+				(unsigned int)pImg->aucPalette[iIndex][1],
+				(unsigned int)pImg->aucPalette[iIndex][2]);
 		}
 		if (iIndex % 8 == 7) {
 			fprintf(pOutFile, "\n");
@@ -356,20 +369,18 @@ vPrintPalette(FILE *pOutFile, const imagedata_type *pImg)
 } /* end of vPrintPalette */
 
 /*
- * vImagePrologue - perform the Encapsulated PostScript initialisation
+ * vImageProloguePS - perform the Encapsulated PostScript initialization
  */
 void
-vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
+vImageProloguePS(diagram_type *pDiag, const imagedata_type *pImg)
 {
 	FILE	*pOutFile;
-	double	dHor, dVer;
-	int	iHorSize, iVerSize;
 
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
 	fail(pImg == NULL);
 
-	if (!bUsePostScript) {
+	if (pImg->iVerSizeScaled <= 0 || pImg->iHorSizeScaled <= 0) {
 		return;
 	}
 
@@ -379,23 +390,10 @@ vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
 
 	iImageCount++;
 
-	/* Scaling */
-	dHor = pImg->iHorizontalSize * pImg->dHorizontalScalingFactor;
-	dVer = pImg->iVerticalSize * pImg->dVerticalScalingFactor;
-
-	/* Make sure the image fits on the paper */
-	if (dHor < dNetPageWidth) {
-		iHorSize = (int)(dHor + 0.5);
-		iVerSize = (int)(dVer + 0.5);
-	} else {
-		iHorSize = (int)(dNetPageWidth + 0.5);
-		iVerSize = (int)(dVer * dNetPageWidth / dHor + 0.5);
-		DBG_DEC(iVerSize);
-	}
-
 	DBG_DEC_C(pDiag->lXleft != 0, pDiag->lXleft);
-	pDiag->lYtop -= lPoints2DrawUnits(iVerSize);
-	vMoveToPS(pDiag, lPoints2DrawUnits(iVerSize));
+
+	pDiag->lYtop -= lPoints2DrawUnits(pImg->iVerSizeScaled);
+	vMoveToPS(pDiag, lPoints2DrawUnits(pImg->iVerSizeScaled));
 
 	pOutFile = pDiag->pOutFile;
 
@@ -405,7 +403,8 @@ vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
 	fprintf(pOutFile, "%%%%Creator: %s %s\n", szCreator, VERSIONSTRING);
 	fprintf(pOutFile, "%%%%Title: Image %03d\n", iImageCount);
 	fprintf(pOutFile, "%%%%CreationDate: %s", szCreationDate);
-	fprintf(pOutFile, "%%%%BoundingBox: 0 0 %d %d\n", iHorSize, iVerSize);
+	fprintf(pOutFile, "%%%%BoundingBox: 0 0 %d %d\n",
+				pImg->iHorSizeScaled, pImg->iVerSizeScaled);
 	fprintf(pOutFile, "%%%%DocumentData: Clean7Bit\n");
 	fprintf(pOutFile, "%%%%LanguageLevel: 2\n");
 	fprintf(pOutFile, "%%%%EndComments\n");
@@ -444,8 +443,8 @@ vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
 			"/Data1 Data2 << >> /FlateDecode filter def\n");
 			fprintf(pOutFile, "/Data Data1 <<\n");
 			fprintf(pOutFile, "\t/Colors %d\n", pImg->iComponents);
-			fprintf(pOutFile, "\t/BitsPerComponent %d\n",
-						pImg->iBitsPerComponent);
+			fprintf(pOutFile, "\t/BitsPerComponent %u\n",
+						pImg->uiBitsPerComponent);
 			fprintf(pOutFile, "\t/Columns %d\n", pImg->iWidth);
 			fprintf(pOutFile,
 				">> /PNGPredictorDecode filter def\n");
@@ -466,7 +465,7 @@ vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
 	case imagetype_is_dib:
 		fprintf(pOutFile, "/Data currentfile ");
 		fprintf(pOutFile, "/ASCII85Decode filter def\n");
-		if (pImg->iBitsPerComponent <= 8) {
+		if (pImg->uiBitsPerComponent <= 8) {
 			vPrintPalette(pOutFile, pImg);
 		} else {
 			fprintf(pOutFile, "/DeviceRGB setcolorspace\n");
@@ -486,7 +485,7 @@ vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
 			dDrawUnits2Points(pDiag->lYtop));
 
 	fprintf(pOutFile, "%d %d scale\n",
-			iHorSize, iVerSize);
+				pImg->iHorSizeScaled, pImg->iVerSizeScaled);
 
 	fprintf(pOutFile, "{ <<\n");
 	fprintf(pOutFile, "\t/ImageType 1\n");
@@ -536,11 +535,11 @@ vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
 			fprintf(pOutFile, "\t/BitsPerComponent 8\n");
 			fprintf(pOutFile, "\t/Decode [0 1 0 1 0 1]\n");
 		} else if (pImg->iColorsUsed > 0) {
-			fail(pImg->iBitsPerComponent > 8);
-			fprintf(pOutFile, "\t/BitsPerComponent %d\n",
-					pImg->iBitsPerComponent);
+			fail(pImg->uiBitsPerComponent > 8);
+			fprintf(pOutFile, "\t/BitsPerComponent %u\n",
+					pImg->uiBitsPerComponent);
 			fprintf(pOutFile, "\t/Decode [0 %d]\n",
-					(1 << pImg->iBitsPerComponent) - 1);
+					(1 << pImg->uiBitsPerComponent) - 1);
 		} else {
 			fprintf(pOutFile, "\t/BitsPerComponent 8\n");
 			fprintf(pOutFile, "\t/Decode [0 1]\n");
@@ -548,7 +547,7 @@ vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
 		break;
 	case imagetype_is_dib:
 		fprintf(pOutFile, "\t/BitsPerComponent 8\n");
-		if (pImg->iBitsPerComponent <= 8) {
+		if (pImg->uiBitsPerComponent <= 8) {
 			fprintf(pOutFile, "\t/Decode [0 255]\n");
 		} else {
 			fprintf(pOutFile, "\t/Decode [0 1 0 1 0 1]\n");
@@ -569,19 +568,15 @@ vImagePrologue(diagram_type *pDiag, const imagedata_type *pImg)
 	fprintf(pOutFile, "  showpage\n");
 	fprintf(pOutFile, "  restore\n");
 	fprintf(pOutFile, "} exec\n");
-} /* end of vImagePrologue */
+} /* end of vImageProloguePS */
 
 /*
- * vImageEpilogue - clean up after Encapsulated PostScript
+ * vImageEpiloguePS - clean up after Encapsulated PostScript
  */
 void
-vImageEpilogue(diagram_type *pDiag)
+vImageEpiloguePS(diagram_type *pDiag)
 {
 	FILE	*pOutFile;
-
-	if (!bUsePostScript) {
-		return;
-	}
 
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
@@ -593,51 +588,32 @@ vImageEpilogue(diagram_type *pDiag)
 	fprintf(pOutFile, "EndEPSF\n");
 
 	pDiag->lXleft = 0;
-} /* end of vImageEpilogue */
+} /* end of vImageEpiloguePS */
 
 /*
- * bAddDummyImage - add a dummy image
+ * bAddDummyImagePS - add a dummy image
  *
- * return TRUE when sucessful, otherwise FALSE
+ * return TRUE when successful, otherwise FALSE
  */
 BOOL
-bAddDummyImage(diagram_type *pDiag, const imagedata_type *pImg)
+bAddDummyImagePS(diagram_type *pDiag, const imagedata_type *pImg)
 {
 	FILE	*pOutFile;
-	double	dHor, dVer;
-	int	iHorSize, iVerSize;
 
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
 	fail(pImg == NULL);
 
-	if (!bUsePostScript) {
-		return FALSE;
-	}
-
-	if (pImg->iVerticalSize <= 0 || pImg->iHorizontalSize <= 0) {
+	if (pImg->iVerSizeScaled <= 0 || pImg->iHorSizeScaled <= 0) {
 		return FALSE;
 	}
 
 	iImageCount++;
 
-	/* Scaling */
-	dHor = pImg->iHorizontalSize * pImg->dHorizontalScalingFactor;
-	dVer = pImg->iVerticalSize * pImg->dVerticalScalingFactor;
-
-	/* Make sure the dummy fits on the paper */
-	if (dHor < dNetPageWidth) {
-		iHorSize = (int)(dHor + 0.5);
-		iVerSize = (int)(dVer + 0.5);
-	} else {
-		iHorSize = (int)(dNetPageWidth + 0.5);
-		iVerSize = (int)(dVer * dNetPageWidth / dHor + 0.5);
-		DBG_DEC(iVerSize);
-	}
-
 	DBG_DEC_C(pDiag->lXleft != 0, pDiag->lXleft);
-	pDiag->lYtop -= lPoints2DrawUnits(iVerSize);
-	vMoveToPS(pDiag, lPoints2DrawUnits(iVerSize));
+
+	pDiag->lYtop -= lPoints2DrawUnits(pImg->iVerSizeScaled);
+	vMoveToPS(pDiag, lPoints2DrawUnits(pImg->iVerSizeScaled));
 
 	pOutFile = pDiag->pOutFile;
 
@@ -648,9 +624,9 @@ bAddDummyImage(diagram_type *pDiag, const imagedata_type *pImg)
 			dDrawUnits2Points(pDiag->lYtop));
 	fprintf(pOutFile, "\t1.0 setlinewidth\n");
 	fprintf(pOutFile, "\t0.3 setgray\n");
-	fprintf(pOutFile, "\t0 %d rlineto\n", iVerSize);
-	fprintf(pOutFile, "\t%d 0 rlineto\n", iHorSize);
-	fprintf(pOutFile, "\t0 %d rlineto\n", -iVerSize);
+	fprintf(pOutFile, "\t0 %d rlineto\n", pImg->iVerSizeScaled);
+	fprintf(pOutFile, "\t%d 0 rlineto\n", pImg->iHorSizeScaled);
+	fprintf(pOutFile, "\t0 %d rlineto\n", -pImg->iVerSizeScaled);
 	fprintf(pOutFile, "\tclosepath\n");
 	fprintf(pOutFile, "\tstroke\n");
 	fprintf(pOutFile, "grestore\n");
@@ -658,74 +634,22 @@ bAddDummyImage(diagram_type *pDiag, const imagedata_type *pImg)
 	pDiag->lXleft = 0;
 
 	return TRUE;
-} /* end of bAddDummyImage */
+} /* end of bAddDummyImagePS */
 
 /*
- * pCreateDiagram - create and initialize a diagram
- *
- * remark: does not return if the diagram can't be created
- */
-diagram_type *
-pCreateDiagram(const char *szTask, const char *szFilename)
-{
-	diagram_type	*pDiag;
-
-	fail(szTask == NULL || szTask[0] == '\0');
-	DBG_MSG("pCreateDiagram");
-
-	/* Get the necessary memory */
-	pDiag = xmalloc(sizeof(diagram_type));
-	/* Initialisation */
-	pDiag->pOutFile = stdout;
-	vPrologue(pDiag->pOutFile, szTask, szFilename);
-	iPageCount = 0;
-	pDiag->lXleft = 0;
-	if (bUsePostScript) {
-		pDiag->lYtop = lPageHeight - PS_TOP_MARGIN;
-	} else {
-		pDiag->lYtop = 0;
-	}
-	/* Return success */
-	return pDiag;
-} /* end of pCreateDiagram */
-
-/*
- * vDestroyDiagram - remove a diagram by freeing the memory it uses
+ * vAddFontsPS - add the list of fonts and complete the prologue
  */
 void
-vDestroyDiagram(diagram_type *pDiag)
-{
-	DBG_MSG("vDestroyDiagram");
-
-	fail(pDiag == NULL);
-
-	if (pDiag == NULL) {
-		return;
-	}
-	if (bUsePostScript && pDiag->lYtop < lPageHeight - PS_TOP_MARGIN) {
-		fprintf(pDiag->pOutFile, "showpage\n");
-	}
-	vEpilogue(pDiag->pOutFile);
-	pDiag = xfree(pDiag);
-} /* end of vDestroyDiagram */
-
-/*
- * vAddFonts2Diagram - add the list of fonts and complete the prologue
- */
-void
-vAddFonts2Diagram(diagram_type *pDiag)
+vAddFontsPS(diagram_type *pDiag)
 {
 	FILE	*pOutFile;
 	const font_table_type *pTmp, *pTmp2;
-	int	iLineLen;
+	size_t	tIndex;
+	int	iLineLen, iOurFontnameLen;
 	BOOL	bFound;
 
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
-
-	if (!bUsePostScript) {
-		return;
-	}
 
 	pOutFile = pDiag->pOutFile;
 	iLineLen = fprintf(pOutFile, "%%%%DocumentFonts:");
@@ -746,10 +670,11 @@ vAddFonts2Diagram(diagram_type *pDiag)
 					break;
 				}
 			}
-			if (bFound) {
+			iOurFontnameLen = (int)strlen(pTmp->szOurFontname);
+			if (bFound || iOurFontnameLen <= 0) {
 				continue;
 			}
-			if (iLineLen + (int)strlen(pTmp->szOurFontname) > 78) {
+			if (iLineLen + iOurFontnameLen > 76) {
 				fprintf(pOutFile, "\n%%%%+");
 				iLineLen = 3;
 			}
@@ -764,10 +689,34 @@ vAddFonts2Diagram(diagram_type *pDiag)
 
 	switch (eEncoding) {
 	case encoding_iso_8859_1:
-		fprintf(pOutFile, "%s\n%s", iso_8859_1_data, iso_8859_x_func);
+		for (tIndex = 0;
+		     tIndex < elementsof(iso_8859_1_data);
+		     tIndex++) {
+			fprintf(pOutFile, "%s\n", iso_8859_1_data[tIndex]);
+		}
+		fprintf(pOutFile, "\n");
+		for (tIndex = 0;
+		     tIndex < elementsof(iso_8859_x_func);
+		     tIndex++) {
+			fprintf(pOutFile, "%s\n", iso_8859_x_func[tIndex]);
+		}
 		break;
 	case encoding_iso_8859_2:
-		fprintf(pOutFile, "%s\n%s", iso_8859_2_data, iso_8859_x_func);
+		for (tIndex = 0;
+		     tIndex < elementsof(iso_8859_2_data);
+		     tIndex++) {
+			fprintf(pOutFile, "%s\n", iso_8859_2_data[tIndex]);
+		}
+		fprintf(pOutFile, "\n");
+		for (tIndex = 0;
+		     tIndex < elementsof(iso_8859_x_func);
+		     tIndex++) {
+			fprintf(pOutFile, "%s\n", iso_8859_x_func[tIndex]);
+		}
+		break;
+	case encoding_utf8:
+		werr(1,
+		"The combination PostScript and UTF-8 is not supported");
 		break;
 	default:
 		DBG_DEC(eEncoding);
@@ -775,201 +724,207 @@ vAddFonts2Diagram(diagram_type *pDiag)
 	}
 
 	/* The rest of the functions */
-	fprintf(pOutFile, "%s", misc_func);
+	for (tIndex = 0; tIndex < elementsof(misc_func); tIndex++) {
+		fprintf(pOutFile, "%s\n", misc_func[tIndex]);
+	}
 	fprintf(pOutFile, "%%%%EndProlog\n");
 	iPageCount = 1;
 	fprintf(pDiag->pOutFile, "%%%%Page: %d %d\n", iPageCount, iPageCount);
 	vAddPageSetup(pDiag->pOutFile);
-} /* end of vAddFonts2Diagram */
+} /* end of vAddFontsPS */
 
 /*
  * vPrintPS - print a PostScript string
  */
 static void
-vPrintPS(FILE *pFile, const char *szString, int iStringLength,
-		unsigned char ucFontstyle)
+vPrintPS(FILE *pFile, const char *szString, size_t tStringLength,
+		USHORT usFontstyle)
 {
-	int iCount;
-	const unsigned char *ucBytes;
+	double		dSuperscriptMove, dSubscriptMove;
+	const UCHAR	*ucBytes;
+	size_t		tCount;
 
-	fail(szString == NULL || iStringLength < 0);
+	fail(szString == NULL);
 
-	if (szString == NULL || szString[0] == '\0' || iStringLength <= 0) {
+	if (szString == NULL || szString[0] == '\0' || tStringLength == 0) {
 		return;
 	}
+	DBG_DEC_C(usFontSizeCurr < MIN_FONT_SIZE, usFontSizeCurr);
 
-	ucBytes = (unsigned char *)szString;
+	dSuperscriptMove = 0.0;
+	dSubscriptMove = 0.0;
+
+	/* Up for superscript */
+	if (bIsSuperscript(usFontstyle) && usFontSizeCurr != 0) {
+		dSuperscriptMove = (double)((usFontSizeCurr + 1) / 2) * 0.375;
+		fprintf(pFile, "0 %.2f rmoveto\n", dSuperscriptMove);
+	}
+
+	/* Down for subscript */
+	if (bIsSubscript(usFontstyle) && usFontSizeCurr != 0) {
+		dSubscriptMove = (double)usFontSizeCurr * 0.125;
+		fprintf(pFile, "0 %.2f rmoveto\n", -dSubscriptMove);
+	}
+
+	/* Generate and print the PostScript output */
+	ucBytes = (UCHAR *)szString;
 	(void)putc('(', pFile);
-	for (iCount = 0; iCount < iStringLength ; iCount++) {
-		switch (ucBytes[iCount]) {
+	for (tCount = 0; tCount < tStringLength ; tCount++) {
+		switch (ucBytes[tCount]) {
 		case '(':
 		case ')':
 		case '\\':
 			(void)putc('\\', pFile);
-			(void)putc(szString[iCount], pFile);
+			(void)putc(szString[tCount], pFile);
 			break;
 		default:
-			if (ucBytes[iCount] < 0x20 ||
-			    (ucBytes[iCount] >= 0x7f &&
-			     ucBytes[iCount] < 0xa0)) {
-				DBG_HEX(ucBytes[iCount]);
+			if (ucBytes[tCount] < 0x20 ||
+			    (ucBytes[tCount] >= 0x7f &&
+			     ucBytes[tCount] < 0x8c)) {
+				DBG_HEX(ucBytes[tCount]);
 				(void)putc(' ', pFile);
-			} else if (ucBytes[iCount] >= 0x80) {
-				fprintf(pFile, "\\%03o", ucBytes[iCount]);
+			} else if (ucBytes[tCount] >= 0x80) {
+				fprintf(pFile, "\\%03o", (UINT)ucBytes[tCount]);
 			} else {
-				(void)putc(szString[iCount], pFile);
+				(void)putc(szString[tCount], pFile);
 			}
 			break;
 		}
 	}
 	fprintf(pFile, ") ");
-	if (bIsStrike(ucFontstyle) && iFontsizeCurr > 0) {
+	if ((bIsStrike(usFontstyle) || bIsMarkDel(usFontstyle)) &&
+			usFontSizeCurr != 0) {
 		fprintf(pFile, "%.2f %.2f LineShow\n",
-			iFontsizeCurr * 0.02, iFontsizeCurr * 0.12);
-	} else if (bIsUnderline(ucFontstyle) && iFontsizeCurr > 0) {
+			(double)usFontSizeCurr * 0.02,
+			(double)usFontSizeCurr * 0.12);
+	} else if (bIsUnderline(usFontstyle) && usFontSizeCurr != 0) {
 		fprintf(pFile, "%.2f %.2f LineShow\n",
-			iFontsizeCurr * 0.02, iFontsizeCurr * -0.06);
+			(double)usFontSizeCurr * 0.02,
+			(double)usFontSizeCurr * -0.06);
 	} else {
 		fprintf(pFile, "show\n");
+	}
+
+	/* Undo the superscript move */
+	if (bIsSuperscript(usFontstyle) && usFontSizeCurr != 0) {
+		fprintf(pFile, "0 %.2f rmoveto\n", -dSuperscriptMove);
+	}
+
+	/* Undo the subscript move */
+	if (bIsSubscript(usFontstyle) && usFontSizeCurr != 0) {
+		fprintf(pFile, "0 %.2f rmoveto\n", dSubscriptMove);
 	}
 } /* end of vPrintPS */
 
 /*
- * vSetColor - move to the given color
+ * vSetColor - move to the specified color
  */
 static void
-vSetColor(FILE *pFile, int iColor)
+vSetColor(FILE *pFile, UCHAR ucFontColor)
 {
-	unsigned int	uiTmp, uiRed, uiGreen, uiBlue;
+	ULONG	ulTmp, ulRed, ulGreen, ulBlue;
 
-	uiTmp = uiColor2Color(iColor);
-	uiRed   = (uiTmp & 0x0000ff00) >> 8;
-	uiGreen = (uiTmp & 0x00ff0000) >> 16;
-	uiBlue  = (uiTmp & 0xff000000) >> 24;
+	ulTmp = ulColor2Color(ucFontColor);
+	ulRed   = (ulTmp & 0x0000ff00) >> 8;
+	ulGreen = (ulTmp & 0x00ff0000) >> 16;
+	ulBlue  = (ulTmp & 0xff000000) >> 24;
 	fprintf(pFile, "%.3f %.3f %.3f setrgbcolor\n",
-				uiRed / 255.0, uiGreen / 255.0, uiBlue / 255.0);
+				ulRed / 255.0, ulGreen / 255.0, ulBlue / 255.0);
 } /* end of vSetColor */
 
 /*
- * vMoveToASCII - move to the given X,Y coordinates (ASCII)
- *
- * Move the current position of the given diagram to its X,Y coordianates,
- * start on a new page if needed
- */
-static void
-vMoveToASCII(diagram_type *pDiag)
-{
-	int	iCount, iNbr;
-
-	fail(pDiag == NULL);
-	fail(pDiag->pOutFile == NULL);
-
-	if (pDiag->lYtop != lYtopCurr) {
-		iNbr = iDrawUnits2Char(pDiag->lXleft);
-		for (iCount = 0; iCount < iNbr; iCount++) {
-			fprintf(pDiag->pOutFile, "%c", FILLER_CHAR);
-		}
-		lYtopCurr = pDiag->lYtop;
-	}
-} /* end of vMoveToASCII */
-
-/*
- * vMove2NextLine - move to the next line
+ * vMove2NextLinePS - move to the next line
  */
 void
-vMove2NextLine(diagram_type *pDiag, draw_fontref tFontRef, int iFontsize)
+vMove2NextLinePS(diagram_type *pDiag, USHORT usFontSize)
 {
 	fail(pDiag == NULL);
-	fail(pDiag->pOutFile == NULL);
-	fail(iFontsize < MIN_FONT_SIZE || iFontsize > MAX_FONT_SIZE);
+	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
 
-	pDiag->lYtop -= lWord2DrawUnits20(iFontsize);
-	if (!bUsePostScript) {
-		(void)fprintf(pDiag->pOutFile, "\n");
-	}
-} /* end of vMove2NextLine */
+	pDiag->lYtop -= lComputeLeading(usFontSize);
+} /* end of vMove2NextLinePS */
 
 /*
- * vSubstring2Diagram - put a substring into a diagram
+ * vSubstringPS - print a sub string
  */
 void
-vSubstring2Diagram(diagram_type *pDiag,
-	char *szString, int iStringLength, long lStringWidth,
-	int iColor, unsigned char ucFontstyle, draw_fontref tFontRef,
-	int iFontsize, int iMaxFontsize)
+vSubstringPS(diagram_type *pDiag,
+	char *szString, size_t tStringLength, long lStringWidth,
+	UCHAR ucFontColor, USHORT usFontstyle, draw_fontref tFontRef,
+	USHORT usFontSize, USHORT usMaxFontSize)
 {
 	const char	*szOurFontname;
 
 	fail(pDiag == NULL || szString == NULL);
 	fail(pDiag->pOutFile == NULL);
 	fail(pDiag->lXleft < 0);
-	fail(iStringLength != (int)strlen(szString));
-	fail(iFontsize < MIN_FONT_SIZE || iFontsize > MAX_FONT_SIZE);
-	fail(iMaxFontsize < MIN_FONT_SIZE || iMaxFontsize > MAX_FONT_SIZE);
-	fail(iFontsize > iMaxFontsize);
+	fail(tStringLength != strlen(szString));
+	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
+	fail(usMaxFontSize < MIN_FONT_SIZE || usMaxFontSize > MAX_FONT_SIZE);
+	fail(usFontSize > usMaxFontSize);
 
-	if (szString[0] == '\0' || iStringLength <= 0) {
+	if (szString[0] == '\0' || tStringLength == 0) {
 		return;
 	}
 
-	if (bUsePostScript) {
-		if (tFontRef != tFontRefCurr || iFontsize != iFontsizeCurr) {
-			szOurFontname = szGetFontname(tFontRef);
-			fail(szOurFontname == NULL);
-			fprintf(pDiag->pOutFile,
-				"%.1f /%s /%s-ISO-8859-x ChgFnt\n",
-				(double)iFontsize / 2.0,
-				szOurFontname, szOurFontname);
-			tFontRefCurr = tFontRef;
-			iFontsizeCurr = iFontsize;
-		}
-		if (iColor != iColorCurr) {
-			vSetColor(pDiag->pOutFile, iColor);
-			iColorCurr = iColor;
-		}
-		vMoveToPS(pDiag, lWord2DrawUnits20(iMaxFontsize));
-		vPrintPS(pDiag->pOutFile, szString, iStringLength, ucFontstyle);
-	} else {
-		vMoveToASCII(pDiag);
-		fprintf(pDiag->pOutFile, "%.*s", iStringLength, szString);
+	if (tFontRef != tFontRefCurr || usFontSize != usFontSizeCurr) {
+		szOurFontname = szGetFontname(tFontRef);
+		fail(szOurFontname == NULL);
+		fprintf(pDiag->pOutFile,
+			"%.1f /%s /%s-ISO-8859-x ChgFnt\n",
+			(double)usFontSize / 2.0,
+			szOurFontname, szOurFontname);
+		tFontRefCurr = tFontRef;
+		usFontSizeCurr = usFontSize;
 	}
+	if ((int)ucFontColor != iFontColorCurr) {
+		vSetColor(pDiag->pOutFile, ucFontColor);
+		iFontColorCurr = (int)ucFontColor;
+	}
+	vMoveToPS(pDiag, lComputeLeading(usMaxFontSize));
+	vPrintPS(pDiag->pOutFile, szString, tStringLength, usFontstyle);
 	pDiag->lXleft += lStringWidth;
-} /* end of vSubstring2Diagram */
+} /* end of vSubstringPS */
 
 /*
- * Create an end of paragraph by moving the y-high mark 1/3 line down
+ * Create an start of paragraph by moving the y-top mark
  */
 void
-vEndOfParagraph2Diagram(diagram_type *pDiag,
-			draw_fontref tFontRef, int iFontsize)
+vStartOfParagraphPS(diagram_type *pDiag, long lBeforeIndentation)
+{
+	fail(pDiag == NULL);
+	fail(lBeforeIndentation < 0);
+
+	pDiag->lXleft = 0;
+	pDiag->lYtop -= lMilliPoints2DrawUnits(lBeforeIndentation);
+} /* end of vStartOfParagraphPS */
+
+/*
+ * Create an end of paragraph by moving the y-top mark
+ */
+void
+vEndOfParagraphPS(diagram_type *pDiag,
+	draw_fontref tFontRef, USHORT usFontSize, long lAfterIndentation)
 {
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
-	fail(iFontsize < MIN_FONT_SIZE || iFontsize > MAX_FONT_SIZE);
+	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
+	fail(lAfterIndentation < 0);
 
 	if (pDiag->lXleft > 0) {
 		/* To the start of the line */
-		vMove2NextLine(pDiag, tFontRef, iFontsize);
+		vMove2NextLine(pDiag, tFontRef, usFontSize);
 	}
-	/* Empty line */
-	if (bUsePostScript) {
-		pDiag->lXleft = 0;
-		pDiag->lYtop -= lWord2DrawUnits20(iFontsize) / 3;
-	} else {
-		vMove2NextLine(pDiag, tFontRef, iFontsize);
-	}
-} /* end of vEndOfParagraph2Diagram */
+
+	pDiag->lXleft = 0;
+	pDiag->lYtop -= lMilliPoints2DrawUnits(lAfterIndentation);
+} /* end of vEndOfParagraphPS */
 
 /*
  * Create an end of page
  */
 void
-vEndOfPage2Diagram(diagram_type *pDiag,
-			draw_fontref tFontRef, int iFontsize)
+vEndOfPagePS(diagram_type *pDiag)
 {
-	if (bUsePostScript) {
-		vMove2NextPage(pDiag);
-	} else {
-		vEndOfParagraph2Diagram(pDiag, tFontRef, iFontsize);
-	}
-} /* end of vEndOfPage2Diagram */
+	vMove2NextPage(pDiag);
+} /* end of vEndOfPagePS */

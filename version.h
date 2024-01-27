@@ -1,6 +1,6 @@
 /*
  * version.h
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2003 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Version and release information
@@ -10,15 +10,15 @@
 #define __version_h 1
 
 /* Strings for the info box */
-#define PURPOSESTRING	"Display text from MS-Word files"
+#define PURPOSESTRING	"Display MS-Word files"
 
 #if defined(__riscos)
-#define AUTHORSTRING	"© 1998-2000 Adri van Os"
+#define AUTHORSTRING	"© 1998-2003 Adri van Os"
 #else
-#define AUTHORSTRING	"(C) 1998-2000 Adri van Os"
+#define AUTHORSTRING	"(C) 1998-2003 Adri van Os"
 #endif /* __riscos */
 
-#define VERSIONSTRING	"0.31  (08 Dec 2000)"
+#define VERSIONSTRING	"0.35  (14 Nov 2003)"
 
 #if defined(DEBUG)
 #define STATUSSTRING	"DEBUG version"

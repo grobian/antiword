@@ -1,6 +1,6 @@
 /*
  * datalist.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000-2002 A.J. van Os; Released under GPL
  *
  * Description:
  * Build, read and destroy a list of Word data blocks
@@ -30,10 +30,10 @@ static data_mem_type	*pAnchor = NULL;
 static data_mem_type	*pBlockLast = NULL;
 /* Variable needed to read the data block list */
 static data_mem_type	*pBlockCurrent = NULL;
-static size_t	tBlockOffset = 0;
+static ULONG	ulBlockOffset = 0;
 static size_t	tByteNext = 0;
 /* Last block read */
-static unsigned char	aucBlock[BIG_BLOCK_SIZE];
+static UCHAR	aucBlock[BIG_BLOCK_SIZE];
 
 
 /*
@@ -56,7 +56,7 @@ vDestroyDataBlockList(void)
 	/* Reset all the control variables */
 	pBlockLast = NULL;
 	pBlockCurrent = NULL;
-	tBlockOffset = 0;
+	ulBlockOffset = 0;
 	tByteNext = 0;
 } /* end of vDestroyDataBlockList */
 
@@ -66,34 +66,34 @@ vDestroyDataBlockList(void)
  * Returns TRUE when successful, otherwise FALSE
  */
 BOOL
-bAdd2DataBlockList(data_block_type *pDataBlock)
+bAdd2DataBlockList(const data_block_type *pDataBlock)
 {
 	data_mem_type	*pListMember;
 
 	fail(pDataBlock == NULL);
-	fail(pDataBlock->lFileOffset < 0);
-	fail(pDataBlock->lDataOffset < 0);
-	fail(pDataBlock->tLength == 0);
+	fail(pDataBlock->ulFileOffset == FC_INVALID);
+	fail(pDataBlock->ulDataPos == CP_INVALID);
+	fail(pDataBlock->ulLength == 0);
 
 	NO_DBG_MSG("bAdd2DataBlockList");
-	NO_DBG_HEX(pDataBlock->lFileOffset);
-	NO_DBG_HEX(pDataBlock->lDataOffset);
-	NO_DBG_HEX(pDataBlock->tLength);
+	NO_DBG_HEX(pDataBlock->ulFileOffset);
+	NO_DBG_HEX(pDataBlock->ulDataPos);
+	NO_DBG_HEX(pDataBlock->ulLength);
 
-	if (pDataBlock->lFileOffset < 0 ||
-	    pDataBlock->lDataOffset < 0 ||
-	    pDataBlock->tLength == 0) {
+	if (pDataBlock->ulFileOffset == FC_INVALID ||
+	    pDataBlock->ulDataPos == CP_INVALID ||
+	    pDataBlock->ulLength == 0) {
 		werr(0, "Software (datablock) error");
 		return FALSE;
 	}
 	/* Check for continuous blocks */
 	if (pBlockLast != NULL &&
-	    pBlockLast->tInfo.lFileOffset +
-	     (long)pBlockLast->tInfo.tLength == pDataBlock->lFileOffset &&
-	    pBlockLast->tInfo.lDataOffset +
-	     (long)pBlockLast->tInfo.tLength == pDataBlock->lDataOffset) {
+	    pBlockLast->tInfo.ulFileOffset +
+	     pBlockLast->tInfo.ulLength == pDataBlock->ulFileOffset &&
+	    pBlockLast->tInfo.ulDataPos +
+	     pBlockLast->tInfo.ulLength == pDataBlock->ulDataPos) {
 		/* These are continous blocks */
-		pBlockLast->tInfo.tLength += pDataBlock->tLength;
+		pBlockLast->tInfo.ulLength += pDataBlock->ulLength;
 		return TRUE;
 	}
 	/* Make a new block */
@@ -112,40 +112,51 @@ bAdd2DataBlockList(data_block_type *pDataBlock)
 } /* end of bAdd2DataBlockList */
 
 /*
+ * ulGetDataOffset - get the offset in the data block list
+ *
+ * Get the fileoffset the current position in the data block list
+ */
+ULONG
+ulGetDataOffset(FILE *pFile)
+{
+	return pBlockCurrent->tInfo.ulFileOffset + ulBlockOffset + tByteNext;
+} /* end of ulGetDataOffset */
+
+/*
  * bSetDataOffset - set the offset in the data block list
  *
- * Make the given fileofset the current position in the data block list
+ * Make the given fileoffset the current position in the data block list
  */
 BOOL
-bSetDataOffset(FILE *pFile, long lFileOffset)
+bSetDataOffset(FILE *pFile, ULONG ulFileOffset)
 {
 	data_mem_type	*pCurr;
 	size_t	tReadLen;
 
-	DBG_HEX(lFileOffset);
+	DBG_HEX(ulFileOffset);
 
 	for (pCurr = pAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		if (lFileOffset < pCurr->tInfo.lFileOffset ||
-		    lFileOffset >= pCurr->tInfo.lFileOffset +
-		     (long)pCurr->tInfo.tLength) {
+		if (ulFileOffset < pCurr->tInfo.ulFileOffset ||
+		    ulFileOffset >= pCurr->tInfo.ulFileOffset +
+		     pCurr->tInfo.ulLength) {
 			/* The file offset is not in this block */
 			continue;
 		}
 		/* Compute the maximum number of bytes to read */
-		tReadLen = (size_t)(pCurr->tInfo.lFileOffset +
-				(long)pCurr->tInfo.tLength -
-				lFileOffset);
+		tReadLen = (size_t)(pCurr->tInfo.ulFileOffset +
+				pCurr->tInfo.ulLength -
+				ulFileOffset);
 		/* Compute the real number of bytes to read */
 		if (tReadLen > sizeof(aucBlock)) {
 			tReadLen = sizeof(aucBlock);
 		}
 		/* Read the bytes */
-		if (!bReadBytes(aucBlock, tReadLen, lFileOffset, pFile)) {
+		if (!bReadBytes(aucBlock, tReadLen, ulFileOffset, pFile)) {
 			return FALSE;
 		}
 		/* Set the control variables */
 		pBlockCurrent = pCurr;
-		tBlockOffset = (size_t)(lFileOffset - pCurr->tInfo.lFileOffset);
+		ulBlockOffset = ulFileOffset - pCurr->tInfo.ulFileOffset;
 		tByteNext = 0;
 		return TRUE;
 	}
@@ -158,34 +169,34 @@ bSetDataOffset(FILE *pFile, long lFileOffset)
 int
 iNextByte(FILE *pFile)
 {
-	long	lReadOff;
+	ULONG	ulReadOff;
 	size_t	tReadLen;
 
 	fail(pBlockCurrent == NULL);
 
 	if (tByteNext >= sizeof(aucBlock) ||
-	    tBlockOffset + tByteNext >= pBlockCurrent->tInfo.tLength) {
-		if (tBlockOffset + sizeof(aucBlock) <
-					pBlockCurrent->tInfo.tLength) {
+	    ulBlockOffset + tByteNext >= pBlockCurrent->tInfo.ulLength) {
+		if (ulBlockOffset + sizeof(aucBlock) <
+					pBlockCurrent->tInfo.ulLength) {
 			/* Same block, next part */
-			tBlockOffset += sizeof(aucBlock);
+			ulBlockOffset += sizeof(aucBlock);
 		} else {
 			/* Next block, first part */
 			pBlockCurrent = pBlockCurrent->pNext;
-			tBlockOffset = 0;
+			ulBlockOffset = 0;
 		}
 		if (pBlockCurrent == NULL) {
 			/* Past the last part of the last block */
 			errno = EIO;
 			return EOF;
 		}
-		tReadLen = pBlockCurrent->tInfo.tLength - tBlockOffset;
+		tReadLen = (size_t)
+				(pBlockCurrent->tInfo.ulLength - ulBlockOffset);
 		if (tReadLen > sizeof(aucBlock)) {
 			tReadLen = sizeof(aucBlock);
 		}
-		lReadOff = pBlockCurrent->tInfo.lFileOffset +
-				(long)tBlockOffset;
-		if (!bReadBytes(aucBlock, tReadLen, lReadOff, pFile)) {
+		ulReadOff = pBlockCurrent->tInfo.ulFileOffset + ulBlockOffset;
+		if (!bReadBytes(aucBlock, tReadLen, ulReadOff, pFile)) {
 			errno = EIO;
 			return EOF;
 		}
@@ -201,21 +212,21 @@ iNextByte(FILE *pFile)
  *
  * All return values can be valid so errno is set in case of error
  */
-unsigned short
+USHORT
 usNextWord(FILE *pFile)
 {
-	unsigned short	usLSB, usMSB;
+	USHORT	usLSB, usMSB;
 
-	usLSB = (unsigned short)iNextByte(pFile);
-	if (usLSB == (unsigned short)EOF) {
+	usLSB = (USHORT)iNextByte(pFile);
+	if (usLSB == (USHORT)EOF) {
 		errno = EIO;
-		return (unsigned short)EOF;
+		return (USHORT)EOF;
 	}
-	usMSB = (unsigned short)iNextByte(pFile);
-	if (usMSB == (unsigned short)EOF) {
+	usMSB = (USHORT)iNextByte(pFile);
+	if (usMSB == (USHORT)EOF) {
 		DBG_MSG("usNextWord: Unexpected EOF");
 		errno = EIO;
-		return (unsigned short)EOF;
+		return (USHORT)EOF;
 	}
 	return (usMSB << 8) | usLSB;
 } /* end of usNextWord */
@@ -227,21 +238,21 @@ usNextWord(FILE *pFile)
  *
  * All return values can be valid so errno is set in case of error
  */
-unsigned long
+ULONG
 ulNextLong(FILE *pFile)
 {
-	unsigned long	ulLSW, ulMSW;
+	ULONG	ulLSW, ulMSW;
 
-	ulLSW = usNextWord(pFile);
-	if (ulLSW == (unsigned long)EOF) {
+	ulLSW = (ULONG)usNextWord(pFile);
+	if (ulLSW == (ULONG)EOF) {
 		errno = EIO;
-		return (unsigned long)EOF;
+		return (ULONG)EOF;
 	}
-	ulMSW = usNextWord(pFile);
-	if (ulMSW == (unsigned long)EOF) {
+	ulMSW = (ULONG)usNextWord(pFile);
+	if (ulMSW == (ULONG)EOF) {
 		DBG_MSG("ulNextLong: Unexpected EOF");
 		errno = EIO;
-		return (unsigned long)EOF;
+		return (ULONG)EOF;
 	}
 	return (ulMSW << 16) | ulLSW;
 } /* end of ulNextLong */
@@ -253,21 +264,21 @@ ulNextLong(FILE *pFile)
  *
  * All return values can be valid so errno is set in case of error
  */
-unsigned short
+USHORT
 usNextWordBE(FILE *pFile)
 {
-	unsigned short usLSB, usMSB;
+	USHORT usLSB, usMSB;
 
-	usMSB = (unsigned short)iNextByte(pFile);
-	if (usMSB == (unsigned short)EOF) {
+	usMSB = (USHORT)iNextByte(pFile);
+	if (usMSB == (USHORT)EOF) {
 		errno = EIO;
-		return (unsigned short)EOF;
+		return (USHORT)EOF;
 	}
-	usLSB = (unsigned short)iNextByte(pFile);
-	if (usLSB == (unsigned short)EOF) {
+	usLSB = (USHORT)iNextByte(pFile);
+	if (usLSB == (USHORT)EOF) {
 		DBG_MSG("usNextWordBE: Unexpected EOF");
 		errno = EIO;
-		return (unsigned short)EOF;
+		return (USHORT)EOF;
 	}
 	return (usMSB << 8) | usLSB;
 } /* end of usNextWordBE */
@@ -279,32 +290,32 @@ usNextWordBE(FILE *pFile)
  *
  * All return values can be valid so errno is set in case of error
  */
-unsigned long
+ULONG
 ulNextLongBE(FILE *pFile)
 {
-	unsigned long ulLSW, ulMSW;
+	ULONG	ulLSW, ulMSW;
 
-	ulMSW = usNextWordBE(pFile);
-	if (ulMSW == (unsigned long)EOF) {
+	ulMSW = (ULONG)usNextWordBE(pFile);
+	if (ulMSW == (ULONG)EOF) {
 		errno = EIO;
-		return (unsigned long)EOF;
+		return (ULONG)EOF;
 	}
-	ulLSW = usNextWordBE(pFile);
-	if (ulLSW == (unsigned long)EOF) {
+	ulLSW = (ULONG)usNextWordBE(pFile);
+	if (ulLSW == (ULONG)EOF) {
 		DBG_MSG("ulNextLongBE: Unexpected EOF");
 		errno = EIO;
-		return (unsigned long)EOF;
+		return (ULONG)EOF;
 	}
 	return (ulMSW << 16) | ulLSW;
 } /* end of ulNextLongBE */
 
 /*
- * iSkipBytes - skip over the given number of bytes
+ * tSkipBytes - skip over the given number of bytes
  *
  * Returns the number of skipped bytes
  */
-int
-iSkipBytes(FILE *pFile, size_t tToSkip)
+size_t
+tSkipBytes(FILE *pFile, size_t tToSkip)
 {
 	size_t	tToGo, tMaxMove, tMove;
 
@@ -314,51 +325,50 @@ iSkipBytes(FILE *pFile, size_t tToSkip)
 	tToGo = tToSkip;
 	while (tToGo != 0) {
 		/* Goto the end of the current block */
-		tMaxMove = min(sizeof(aucBlock) -
-				tByteNext,
-				pBlockCurrent->tInfo.tLength -
-				tBlockOffset -
-				tByteNext);
+		tMaxMove = min(sizeof(aucBlock) - tByteNext,
+				(size_t)(pBlockCurrent->tInfo.ulLength -
+				ulBlockOffset - tByteNext));
 		tMove = min(tMaxMove, tToGo);
 		tByteNext += tMove;
 		tToGo -= tMove;
 		if (tToGo != 0) {
 			/* Goto the next block */
 			if (iNextByte(pFile) == EOF) {
-				return (int)(tToSkip - tToGo);
+				return tToSkip - tToGo;
 			}
 			tToGo--;
 		}
 	}
-	return (int)tToSkip;
-} /* end of iSkipBytes */
+	return tToSkip;
+} /* end of tSkipBytes */
 
 /*
- * Translate the start from the begin of the data to an offset in the file.
+ * Translate  a data position to an offset in the file.
+ * Logical to physical offset.
  *
- * Returns:	 -1: in case of error
- *		>=0: the computed file offset
+ * Returns:	FC_INVALID: in case of error
+ *		otherwise: the computed file offset
  */
-long
-lDataOffset2FileOffset(long lDataOffset)
+ULONG
+ulDataPos2FileOffset(ULONG ulDataPos)
 {
 	data_mem_type	*pCurr;
 
-	fail(lDataOffset < 0);
+	fail(ulDataPos == CP_INVALID);
 
 	for (pCurr = pAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		if (lDataOffset < pCurr->tInfo.lDataOffset ||
-		    lDataOffset >= pCurr->tInfo.lDataOffset +
-		     (long)pCurr->tInfo.tLength) {
+		if (ulDataPos < pCurr->tInfo.ulDataPos ||
+		    ulDataPos >= pCurr->tInfo.ulDataPos +
+		     pCurr->tInfo.ulLength) {
 			/* The data offset is not in this block, try the next */
 			continue;
 		}
 		/* The data offset is in the current block */
-		return pCurr->tInfo.lFileOffset +
-				lDataOffset -
-				pCurr->tInfo.lDataOffset;
+		return pCurr->tInfo.ulFileOffset +
+				ulDataPos -
+				pCurr->tInfo.ulDataPos;
 	}
 	/* Passed beyond the end of the list */
-	DBG_HEX_C(lDataOffset != 0, lDataOffset);
-	return -1;
-} /* end of lDataOffset2FileOffset */
+	DBG_HEX_C(ulDataPos != 0, ulDataPos);
+	return FC_INVALID;
+} /* end of ulDataPos2FileOffset */

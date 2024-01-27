@@ -1,6 +1,6 @@
 /*
  * finddata.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000-2002 A.J. van Os; Released under GPL
  *
  * Description:
  * Find the blocks that contain the data of MS Word files
@@ -17,55 +17,59 @@
  * Returns TRUE when successful, otherwise FALSE
  */
 BOOL
-bAddDataBlocks(long lFirstOffset, size_t tTotalLength,
-	int iStartBlock, const int *aiBBD, size_t tBBDLen)
+bAddDataBlocks(ULONG ulDataPosFirst, ULONG ulTotalLength,
+	ULONG ulStartBlock, const ULONG *aulBBD, size_t tBBDLen)
 {
 	data_block_type	tDataBlock;
-	long	lDataOffset;
-	size_t	tToGo, tOffset;
-	int	iIndex;
-	BOOL	bResult;
+	ULONG	ulDataPos, ulOffset, ulIndex;
+	long	lToGo;
+	BOOL	bSuccess;
 
-	fail(lFirstOffset < 0);
-	fail(iStartBlock < 0);
-	fail(aiBBD == NULL);
+	fail(ulTotalLength > (ULONG)LONG_MAX);
+	fail(ulStartBlock > MAX_BLOCKNUMBER && ulStartBlock != END_OF_CHAIN);
+	fail(aulBBD == NULL);
 
-	NO_DBG_HEX(lFirstOffset);
-	NO_DBG_DEC(tTotalLength);
+	NO_DBG_HEX(ulDataPosFirst);
+	NO_DBG_DEC(ulTotalLength);
 
-	tToGo = tTotalLength;
-	lDataOffset = lFirstOffset;
-	tOffset = (size_t)lFirstOffset;
-	for (iIndex = iStartBlock;
-	     iIndex != END_OF_CHAIN && tToGo != 0;
-	     iIndex = aiBBD[iIndex]) {
-		if (iIndex < 0 || iIndex >= (int)tBBDLen) {
-			werr(1, "The Big Block Depot is corrupt");
-		}
-		if (tOffset >= BIG_BLOCK_SIZE) {
-			tOffset -= BIG_BLOCK_SIZE;
-			continue;
-		}
-		tDataBlock.lFileOffset =
-			((long)iIndex + 1) * BIG_BLOCK_SIZE + (long)tOffset;
-		tDataBlock.lDataOffset = lDataOffset;
-		tDataBlock.tLength = min(BIG_BLOCK_SIZE - tOffset, tToGo);
-		tOffset = 0;
-		if (!bAdd2DataBlockList(&tDataBlock)) {
-			DBG_HEX(tDataBlock.lFileOffset);
-			DBG_HEX(tDataBlock.lDataOffset);
-			DBG_DEC(tDataBlock.tLength);
+	lToGo = (long)ulTotalLength;
+
+	ulDataPos = ulDataPosFirst;
+	ulOffset = ulDataPosFirst;
+	for (ulIndex = ulStartBlock;
+	     ulIndex != END_OF_CHAIN && lToGo > 0;
+	     ulIndex = aulBBD[ulIndex]) {
+		if (ulIndex == UNUSED_BLOCK || ulIndex >= (ULONG)tBBDLen) {
+			DBG_DEC(ulIndex);
+			DBG_DEC(tBBDLen);
 			return FALSE;
 		}
-		lDataOffset += (long)tDataBlock.tLength;
-		tToGo -= tDataBlock.tLength;
+		if (ulOffset >= BIG_BLOCK_SIZE) {
+			ulOffset -= BIG_BLOCK_SIZE;
+			continue;
+		}
+		tDataBlock.ulFileOffset =
+			(ulIndex + 1) * BIG_BLOCK_SIZE + ulOffset;
+		tDataBlock.ulDataPos = ulDataPos;
+		tDataBlock.ulLength = min(BIG_BLOCK_SIZE - ulOffset,
+						(ULONG)lToGo);
+		fail(tDataBlock.ulLength > BIG_BLOCK_SIZE);
+		ulOffset = 0;
+		if (!bAdd2DataBlockList(&tDataBlock)) {
+			DBG_HEX(tDataBlock.ulFileOffset);
+			DBG_HEX(tDataBlock.ulDataPos);
+			DBG_DEC(tDataBlock.ulLength);
+			return FALSE;
+		}
+		ulDataPos += tDataBlock.ulLength;
+		lToGo -= (long)tDataBlock.ulLength;
 	}
-	bResult = tToGo == 0 ||
-		(tTotalLength == SIZE_T_MAX && iIndex == END_OF_CHAIN);
-	DBG_DEC_C(!bResult, tToGo);
-	DBG_DEC_C(!bResult, tTotalLength);
-	DBG_DEC_C(!bResult, iIndex);
-	return bResult;
+	bSuccess = lToGo == 0 ||
+		(ulTotalLength == (ULONG)LONG_MAX && ulIndex == END_OF_CHAIN);
+	DBG_DEC_C(!bSuccess, lToGo);
+	DBG_DEC_C(!bSuccess, ulTotalLength);
+	DBG_DEC_C(!bSuccess, ulIndex);
+	return bSuccess;
 } /* end of bAddDataBlocks */
 
 /*
@@ -76,30 +80,29 @@ bAddDataBlocks(long lFirstOffset, size_t tTotalLength,
  * Returns TRUE when successful, otherwise FALSE
  */
 BOOL
-bGet6DocumentData(FILE *pFile, int iStartBlock,
-	const int *aiBBD, size_t tBBDLen, const unsigned char *aucHeader)
+bGet6DocumentData(FILE *pFile, ULONG ulStartBlock,
+	const ULONG *aulBBD, size_t tBBDLen, const UCHAR *aucHeader)
 {
-	unsigned char	*aucBuffer;
-	long	lOffset;
-	size_t	tBeginTextInfo, tTextInfoLen, tTotLength;
-	int	iIndex;
-	int	iOff, iType, iLen, iPieces;
+	UCHAR	*aucBuffer;
+	ULONG	ulBeginTextInfo, ulOffset, ulTotLength;
+	size_t	tTextInfoLen;
+	int	iIndex, iOff, iType, iLen, iPieces;
 
 	DBG_MSG("bGet6DocumentData");
 
 	fail(pFile == NULL);
-	fail(aiBBD == NULL);
+	fail(aulBBD == NULL);
 	fail(aucHeader == NULL);
 
-	tBeginTextInfo = (size_t)ulGetLong(0x160, aucHeader);
+	ulBeginTextInfo = ulGetLong(0x160, aucHeader);
+	DBG_HEX(ulBeginTextInfo);
 	tTextInfoLen = (size_t)ulGetLong(0x164, aucHeader);
-	DBG_HEX(tBeginTextInfo);
 	DBG_DEC(tTextInfoLen);
 
 	aucBuffer = xmalloc(tTextInfoLen);
-	if (!bReadBuffer(pFile, iStartBlock,
-			aiBBD, tBBDLen, BIG_BLOCK_SIZE,
-			aucBuffer, tBeginTextInfo, tTextInfoLen)) {
+	if (!bReadBuffer(pFile, ulStartBlock,
+			aulBBD, tBBDLen, BIG_BLOCK_SIZE,
+			aucBuffer, ulBeginTextInfo, tTextInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
 		return FALSE;
 	}
@@ -130,18 +133,16 @@ bGet6DocumentData(FILE *pFile, int iStartBlock,
 		iPieces = (iLen - 4) / 12;
 		DBG_DEC(iPieces);
 		for (iIndex = 0; iIndex < iPieces; iIndex++) {
-			lOffset = (long)ulGetLong(
+			ulOffset = ulGetLong(
 				iOff + (iPieces + 1) * 4 + iIndex * 8 + 2,
 				aucBuffer);
-			tTotLength = (size_t)ulGetLong(
-						iOff + (iIndex + 1) * 4,
+			ulTotLength = ulGetLong(iOff + (iIndex + 1) * 4,
 						aucBuffer) -
-					(size_t)ulGetLong(
-						iOff + iIndex * 4,
+					ulGetLong(iOff + iIndex * 4,
 						aucBuffer);
-			if (!bAddDataBlocks(lOffset, tTotLength,
-					iStartBlock,
-					aiBBD, tBBDLen)) {
+			if (!bAddDataBlocks(ulOffset, ulTotLength,
+					ulStartBlock,
+					aulBBD, tBBDLen)) {
 				aucBuffer = xfree(aucBuffer);
 				return FALSE;
 			}

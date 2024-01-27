@@ -1,6 +1,6 @@
 /*
  * icons.c
- * Copyright (c) A.J. van Os
+ * Copyright (C) 1998-2001 A.J. van Os; Released under GPL
  *
  * Description:
  * Update window icons
@@ -55,11 +55,11 @@ vUpdateWriteable(wimp_w tWindow, wimp_i tIconNumber, char *szString)
 
 	fail(szString == NULL);
 
-	DBG_DEC(tIconNumber);
-	DBG_MSG(szString);
+	NO_DBG_DEC(tIconNumber);
+	NO_DBG_MSG(szString);
 
 	wimpt_noerr(wimp_get_icon_info(tWindow, tIconNumber, &tIcon));
-	DBG_HEX(tIcon.flags);
+	NO_DBG_HEX(tIcon.flags);
 	if ((tIcon.flags & (wimp_ITEXT|wimp_INDIRECT)) !=
 	    (wimp_ITEXT|wimp_INDIRECT)) {
 		werr(1, "Icon %d must be indirected text", (int)tIconNumber);

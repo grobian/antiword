@@ -1,6 +1,6 @@
 /*
  * xmalloc.c
- * Copyright (C) 1998,1999 A.J. van Os
+ * Copyright (C) 1998-2003 A.J. van Os
  *
  * Description:
  * Extended malloc and friends
@@ -10,7 +10,13 @@
 #include <string.h>
 #include "antiword.h"
 
-static char *szWarning = "Memory allocation failed, unable to continue";
+#if !defined(DMALLOC)
+static char *szWarning =
+	"Memory allocation failed, unable to continue";
+#if defined(__dos)
+static char *szDosWarning =
+	"DOS can't allocate this kind of memory, unable to continue";
+#endif /* __dos */
 
 
 /*
@@ -24,12 +30,42 @@ xmalloc(size_t tSize)
 {
 	void	*pvTmp;
 
+	if (tSize == 0) {
+		tSize = 1;
+	}
 	pvTmp = malloc(tSize);
 	if (pvTmp == NULL) {
 		werr(1, szWarning);
 	}
 	return pvTmp;
 } /* end of xmalloc */
+
+/*
+ * xcalloc - Allocates and zeros dynamic memory
+ *
+ * See calloc(3), but unlike calloc(3) xcalloc does not return in case of error
+ */
+void *
+xcalloc(size_t tNmemb, size_t tSize)
+{
+	void	*pvTmp;
+
+#if defined(__dos)
+	if ((ULONG)tNmemb * (ULONG)tSize > 0xffffUL) {
+		werr(1, szDosWarning);
+	}
+#endif /* __dos */
+
+	if (tNmemb == 0 || tSize == 0) {
+		tNmemb = 1;
+		tSize = 1;
+	}
+	pvTmp = calloc(tNmemb, tSize);
+	if (pvTmp == NULL) {
+		werr(1, szWarning);
+	}
+	return pvTmp;
+} /* end of xcalloc */
 
 /*
  * xrealloc - Changes the size of a memory object
@@ -67,6 +103,7 @@ xstrdup(const char *szArg)
 	strcpy(szTmp, szArg);
 	return szTmp;
 } /* end of xstrdup */
+#endif /* !DMALLOC */
 
 /*
  * xfree - Deallocates dynamic memory

@@ -1,6 +1,6 @@
 /*
  * saveas.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2001 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to save the results as a textfile or a drawfile
@@ -105,6 +105,7 @@ bText2File(char *szFilename, void *pvHandle)
 			iToGo -= iSize;
 			break;
 		case draw_OBJSPRITE:
+		case draw_OBJJPEG:
 			/* These are not relevant in a textfile */
 			iSize = ((draw_spristrhdr *)pcTmp)->size;
 			pcTmp += iSize;
@@ -171,6 +172,7 @@ bDraw2File(char *szFilename, void *pvHandle)
 	draw_textstrhdr	tText;
 	draw_pathstrhdr	tPath;
 	draw_spristrhdr	tSprite;
+	draw_jpegstrhdr tJpeg;
 	int	*piPath;
 	char	*pcTmp;
 	int	iYadd, iToGo, iSize;
@@ -268,6 +270,24 @@ bDraw2File(char *szFilename, void *pvHandle)
 				pcTmp += iSize;
 			}
 			iToGo -= tSprite.size;
+			break;
+		case draw_OBJJPEG:
+			tJpeg = *(draw_jpegstrhdr *)pcTmp;
+			/* First correct the coordinates */
+			tJpeg.bbox.y0 += iYadd;
+			tJpeg.bbox.y1 += iYadd;
+			tJpeg.trfm[5] += iYadd;
+			/* Now write the information to file */
+			bSuccess = bWrite2File(&tJpeg,
+				sizeof(tJpeg), pFile, szFilename);
+			pcTmp += sizeof(tJpeg);
+			iSize = tJpeg.size - sizeof(tJpeg);
+			if (bSuccess) {
+				bSuccess = bWrite2File(pcTmp,
+					iSize, pFile, szFilename);
+				pcTmp += iSize;
+			}
+			iToGo -= tJpeg.size;
 			break;
 		default:
 			DBG_DEC(tText.tag);

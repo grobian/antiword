@@ -1,6 +1,6 @@
 /*
  * out2window.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
  *
  * Description:
  * Output to a text window
@@ -13,7 +13,7 @@
 
 
 /* Used for numbering the chapters */
-static int	aiHdrCounter[9];
+static unsigned int	auiHdrCounter[9];
 
 
 /*
@@ -24,29 +24,29 @@ vString2Diagram(diagram_type *pDiag, output_type *pAnchor)
 {
 	output_type	*pOutput;
 	long		lWidth;
-	int		iMaxFontsize;
+	USHORT		usMaxFontSize;
 
 	fail(pDiag == NULL);
 	fail(pAnchor == NULL);
 
 	/* Compute the maximum fontsize in this string */
-	iMaxFontsize = MIN_FONT_SIZE;
+	usMaxFontSize = MIN_FONT_SIZE;
 	for (pOutput = pAnchor; pOutput != NULL; pOutput = pOutput->pNext) {
-		if (pOutput->sFontsize > iMaxFontsize) {
-			iMaxFontsize = pOutput->sFontsize;
+		if (pOutput->usFontSize > usMaxFontSize) {
+			usMaxFontSize = pOutput->usFontSize;
 		}
 	}
 
 	/* Goto the next line */
-	vMove2NextLine(pDiag, pAnchor->tFontRef, iMaxFontsize);
+	vMove2NextLine(pDiag, pAnchor->tFontRef, usMaxFontSize);
 
 	/* Output all substrings */
 	for (pOutput = pAnchor; pOutput != NULL; pOutput = pOutput->pNext) {
 		lWidth = lMilliPoints2DrawUnits(pOutput->lStringWidth);
 		vSubstring2Diagram(pDiag, pOutput->szStorage,
-			pOutput->iNextFree, lWidth, pOutput->iColor,
-			pOutput->ucFontstyle, pOutput->tFontRef,
-			pOutput->sFontsize, iMaxFontsize);
+			pOutput->tNextFree, lWidth, pOutput->ucFontColor,
+			pOutput->usFontStyle, pOutput->tFontRef,
+			pOutput->usFontSize, usMaxFontSize);
 	}
 
 	/* Goto the start of the line */
@@ -54,7 +54,7 @@ vString2Diagram(diagram_type *pDiag, output_type *pAnchor)
 } /* end of vString2Diagram */
 
 /*
- * vSetLeftIndentation - set the left indentation of the given diagram
+ * vSetLeftIndentation - set the left indentation of the specified diagram
  */
 void
 vSetLeftIndentation(diagram_type *pDiag, long lLeftIndentation)
@@ -93,16 +93,16 @@ lComputeNetWidth(output_type *pAnchor)
 	fail(pTmp->pNext != NULL);
 
 	/* Step 2: remove the white-space from the end of the string */
-	while (pTmp->iNextFree > 0 &&
-	       isspace(pTmp->szStorage[pTmp->iNextFree - 1])) {
-		pTmp->szStorage[pTmp->iNextFree - 1] = '\0';
-		pTmp->iNextFree--;
+	while (pTmp->tNextFree != 0 &&
+	       isspace((int)(UCHAR)pTmp->szStorage[pTmp->tNextFree - 1])) {
+		pTmp->szStorage[pTmp->tNextFree - 1] = '\0';
+		pTmp->tNextFree--;
 		NO_DBG_DEC(pTmp->lStringWidth);
 		pTmp->lStringWidth = lComputeStringWidth(
 						pTmp->szStorage,
-						pTmp->iNextFree,
+						pTmp->tNextFree,
 						pTmp->tFontRef,
-						pTmp->sFontsize);
+						pTmp->usFontSize);
 		NO_DBG_DEC(pTmp->lStringWidth);
 	}
 
@@ -120,7 +120,8 @@ static int
 iComputeHoles(output_type *pAnchor)
 {
 	output_type	*pTmp;
-	int	iIndex, iCounter;
+	size_t	tIndex;
+	int	iCounter;
 	BOOL	bWasSpace, bIsSpace;
 
 	fail(pAnchor == NULL);
@@ -129,10 +130,10 @@ iComputeHoles(output_type *pAnchor)
 	bIsSpace = FALSE;
 	/* Count the holes */
 	for (pTmp = pAnchor; pTmp != NULL; pTmp = pTmp->pNext) {
-		fail(pTmp->iNextFree != (int)strlen(pTmp->szStorage));
-		for (iIndex = 0; iIndex <= pTmp->iNextFree; iIndex++) {
+		fail(pTmp->tNextFree != strlen(pTmp->szStorage));
+		for (tIndex = 0; tIndex <= pTmp->tNextFree; tIndex++) {
 			bWasSpace = bIsSpace;
-			bIsSpace = isspace(pTmp->szStorage[iIndex]);
+			bIsSpace = isspace((int)(UCHAR)pTmp->szStorage[tIndex]);
 			if (bWasSpace && !bIsSpace) {
 				iCounter++;
 			}
@@ -146,7 +147,7 @@ iComputeHoles(output_type *pAnchor)
  */
 void
 vAlign2Window(diagram_type *pDiag, output_type *pAnchor,
-	long lScreenWidth, unsigned char ucAlignment)
+	long lScreenWidth, UCHAR ucAlignment)
 {
 	long	lNetWidth, lLeftIndentation;
 
@@ -195,7 +196,7 @@ vAlign2Window(diagram_type *pDiag, output_type *pAnchor,
  */
 void
 vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
-	long lScreenWidth, long lRightIndentation, unsigned char ucAlignment)
+	long lScreenWidth, long lRightIndentation, UCHAR ucAlignment)
 {
 	output_type	*pTmp;
 	char	*pcNew, *pcOld, *szStorage;
@@ -228,18 +229,22 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 	/* Justify */
 	fail(ucAlignment != ALIGNMENT_JUSTIFY);
 	lSpaceWidth = lComputeStringWidth(" ", 1,
-				pAnchor->tFontRef, pAnchor->sFontsize);
+				pAnchor->tFontRef, pAnchor->usFontSize);
 	lToAdd = lScreenWidth -
 			lNetWidth -
 			lDrawUnits2MilliPoints(pDiag->lXleft) +
 			lRightIndentation;
-	DBG_DEC_C(lToAdd < 0, lSpaceWidth);
-	DBG_DEC_C(lToAdd < 0, lToAdd);
-	DBG_DEC_C(lToAdd < 0, lScreenWidth);
-	DBG_DEC_C(lToAdd < 0, lNetWidth);
-	DBG_DEC_C(lToAdd < 0, lDrawUnits2MilliPoints(pDiag->lXleft));
-	DBG_DEC_C(lToAdd < 0, pDiag->lXleft);
-	DBG_DEC_C(lToAdd < 0, lRightIndentation);
+#if defined(DEBUG)
+	if (lToAdd / lSpaceWidth < -1) {
+		DBG_DEC(lSpaceWidth);
+		DBG_DEC(lToAdd);
+		DBG_DEC(lScreenWidth);
+		DBG_DEC(lNetWidth);
+		DBG_DEC(lDrawUnits2MilliPoints(pDiag->lXleft));
+		DBG_DEC(pDiag->lXleft);
+		DBG_DEC(lRightIndentation);
+	}
+#endif /* DEBUG */
 	lToAdd /= lSpaceWidth;
 	DBG_DEC_C(lToAdd < 0, lToAdd);
 	if (lToAdd <= 0) {
@@ -250,9 +255,9 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 	iHoles = iComputeHoles(pAnchor);
 	/* Justify by adding spaces */
 	for (pTmp = pAnchor; pTmp != NULL; pTmp = pTmp->pNext) {
-		fail(pTmp->iNextFree != (int)strlen(pTmp->szStorage));
+		fail(pTmp->tNextFree != strlen(pTmp->szStorage));
 		fail(lToAdd < 0);
-		szStorage = xmalloc((size_t)(pTmp->iNextFree + lToAdd + 1));
+		szStorage = xmalloc(pTmp->tNextFree + (size_t)lToAdd + 1);
 		pcNew = szStorage;
 		for (pcOld = pTmp->szStorage; *pcOld != '\0'; pcOld++) {
 			*pcNew++ = *pcOld;
@@ -270,12 +275,13 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 		*pcNew = '\0';
 		pTmp->szStorage = xfree(pTmp->szStorage);
 		pTmp->szStorage = szStorage;
-		pTmp->tStorageSize = (size_t)(pTmp->iNextFree + lToAdd + 1);
+		pTmp->tStorageSize = pTmp->tNextFree + (size_t)lToAdd + 1;
 		pTmp->lStringWidth +=
-			(pcNew - szStorage - (long)pTmp->iNextFree) *
+			(pcNew - szStorage - (long)pTmp->tNextFree) *
 			lSpaceWidth;
-		pTmp->iNextFree = pcNew - szStorage;
-		fail(pTmp->iNextFree != (int)strlen(pTmp->szStorage));
+		fail(pcNew < szStorage);
+		pTmp->tNextFree = (size_t)(pcNew - szStorage);
+		fail(pTmp->tNextFree != strlen(pTmp->szStorage));
 	}
 	DBG_DEC_C(lToAdd != 0, lToAdd);
 	vString2Diagram(pDiag, pAnchor);
@@ -287,45 +293,101 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 void
 vResetStyles(void)
 {
-	(void)memset(aiHdrCounter, 0, sizeof(aiHdrCounter));
+	(void)memset(auiHdrCounter, 0, sizeof(auiHdrCounter));
 } /* end of vResetStyles */
 
 /*
  * Add the style characters to the line
+ *
+ * Returns the length of the resulting string
  */
-int
-iStyle2Window(char *szLine, const style_block_type *pStyleInfo)
+size_t
+tStyle2Window(char *szLine, const style_block_type *pStyle,
+	const section_block_type *pSection)
 {
 	char	*pcTxt;
-	int	iIndex, iStyleIndex;
+	int	iIndex;
+	BOOL	bNeedPrevLvl;
+	level_type_enum	eNumType;
+	USHORT	usStyleIndex;
+	UCHAR	ucNFC;
 
-	fail(szLine == NULL || pStyleInfo == NULL);
+	fail(szLine == NULL || pStyle == NULL || pSection == NULL);
+
+	if (pStyle->usIstd == 0 || pStyle->usIstd > 9) {
+		szLine[0] = '\0';
+		return 0;
+	}
+
+	usStyleIndex = pStyle->usIstd - 1;
+	/* Set the numbers */
+	for (iIndex = 0; iIndex < 9; iIndex++) {
+		if (iIndex == (int)usStyleIndex) {
+			auiHdrCounter[iIndex]++;
+		} else if (iIndex > (int)usStyleIndex) {
+			auiHdrCounter[iIndex] = 0;
+		} else if (auiHdrCounter[iIndex] == 0) {
+			auiHdrCounter[iIndex] = 1;
+		}
+	}
+
+	eNumType = eGetNumType(pStyle->ucNumLevel);
+	if (eNumType != level_type_outline) {
+		szLine[0] = '\0';
+		return 0;
+	}
 
 	pcTxt = szLine;
-	if ((int)pStyleInfo->ucStyle >= 1 && (int)pStyleInfo->ucStyle <= 9) {
-		iStyleIndex = (int)pStyleInfo->ucStyle - 1;
-		for (iIndex = 0; iIndex < 9; iIndex++) {
-			if (iIndex == iStyleIndex) {
-				aiHdrCounter[iIndex]++;
-			} else if (iIndex > iStyleIndex) {
-				aiHdrCounter[iIndex] = 0;
-			} else if (aiHdrCounter[iIndex] < 1) {
-				aiHdrCounter[iIndex] = 1;
+	bNeedPrevLvl = (pSection->usNeedPrevLvl & BIT(usStyleIndex)) != 0;
+	/* Print the numbers */
+	for (iIndex = 0; iIndex <= (int)usStyleIndex; iIndex++) {
+		if (iIndex == (int)usStyleIndex ||
+		    (bNeedPrevLvl && iIndex < (int)usStyleIndex)) {
+			ucNFC = pSection->aucNFC[iIndex];
+			switch(ucNFC) {
+			case LIST_ARABIC_NUM:
+			case LIST_ARABIC_NUM_2:
+			case LIST_ARABIC_NUM_3:
+				pcTxt += sprintf(pcTxt, "%u",
+					auiHdrCounter[iIndex]);
+				break;
+			case LIST_UPPER_ROMAN:
+			case LIST_LOWER_ROMAN:
+				pcTxt += tNumber2Roman(
+					auiHdrCounter[iIndex],
+					ucNFC == LIST_UPPER_ROMAN,
+					pcTxt);
+				break;
+			case LIST_UPPER_ALPHA:
+			case LIST_LOWER_ALPHA:
+				pcTxt += tNumber2Alpha(
+					auiHdrCounter[iIndex],
+					ucNFC == LIST_UPPER_ALPHA,
+					pcTxt);
+				break;
+			default:
+				DBG_DEC(ucNFC);
+				DBG_FIXME();
+				pcTxt += sprintf(pcTxt, "%u",
+					auiHdrCounter[iIndex]);
+				break;
 			}
-			if (iIndex <= iStyleIndex) {
-				pcTxt += sprintf(pcTxt, "%d",
-						aiHdrCounter[iIndex]);
-				if (iIndex < iStyleIndex) {
-					*pcTxt++ = '.';
-				}
+			if (iIndex < (int)usStyleIndex) {
+				*pcTxt++ = '.';
+			} else if (iIndex == (int)usStyleIndex) {
+				*pcTxt++ = ' ';
 			}
 		}
-		*pcTxt++ = ' ';
 	}
 	*pcTxt = '\0';
+	NO_DBG_MSG_C((int)pStyle->usIstd >= 1 &&
+		(int)pStyle->usIstd <= 9 &&
+		eNumType != level_type_none &&
+		eNumType != level_type_outline, szLine);
 	NO_DBG_MSG_C(szLine[0] != '\0', szLine);
-	return pcTxt - szLine;
-} /* end of iStyle2Window */
+	fail(pcTxt < szLine);
+	return (size_t)(pcTxt - szLine);
+} /* end of tStyle2Window */
 
 /*
  * vRemoveRowEnd - remove the end of table row indicator
@@ -350,14 +412,95 @@ vRemoveRowEnd(char *szRowTxt)
 		DBG_HEX(szRowTxt[iLastIndex]);
 	}
 
+	if (iLastIndex >= 0 && szRowTxt[iLastIndex] == '\n') {
+		szRowTxt[iLastIndex] = '\0';
+		iLastIndex--;
+	}
+
 	if (iLastIndex >= 0 && szRowTxt[iLastIndex] == TABLE_SEPARATOR) {
 		szRowTxt[iLastIndex] = '\0';
 		return;
 	}
 
+	DBG_DEC(iLastIndex);
 	DBG_HEX(szRowTxt[iLastIndex]);
 	DBG_MSG(szRowTxt);
 } /* end of vRemoveRowEnd */
+
+/*
+ * tComputeStringLengthMax - max string length in relation to max column width
+ *
+ * Return the maximum string length
+ */
+static size_t
+tComputeStringLengthMax(const char *szString, size_t tColumnWidthMax)
+{
+	const char	*pcTmp;
+	size_t	tLengthMax, tLenPrev, tLen, tWidth;
+
+	fail(szString == NULL);
+	fail(tColumnWidthMax == 0);
+
+	pcTmp = strchr(szString, '\n');
+	if (pcTmp != NULL) {
+		tLengthMax = (size_t)(pcTmp - szString + 1);
+	} else {
+		tLengthMax = strlen(szString);
+	}
+	if (tLengthMax == 0) {
+		return 0;
+	}
+
+	tLen = 0;
+	tWidth = 0;
+	for (;;) {
+		tLenPrev = tLen;
+		tLen += tGetCharacterLength(szString + tLen);
+		DBG_DEC_C(tLen > tLengthMax, tLen);
+		DBG_DEC_C(tLen > tLengthMax, tLengthMax);
+		fail(tLen > tLengthMax);
+		tWidth = tCountColumns(szString, tLen);
+		if (tWidth > tColumnWidthMax) {
+			return tLenPrev;
+		}
+		if (tLen >= tLengthMax) {
+			return tLengthMax;
+		}
+	}
+} /* end of tComputeStringLengthMax */
+
+/*
+ * tGetBreakingPoint - get the number of bytes that fit the column
+ *
+ * Returns the number of bytes that fit the column
+ */
+static size_t
+tGetBreakingPoint(const char *szString,
+	size_t tLen, size_t tWidth, size_t tColumnWidthMax)
+{
+	int	iIndex;
+
+	fail(szString == NULL);
+	fail(tLen > strlen(szString));
+	fail(tWidth > tColumnWidthMax);
+
+	if (tWidth < tColumnWidthMax ||
+	    (tWidth == tColumnWidthMax &&
+	     (szString[tLen] == ' ' ||
+	      szString[tLen] == '\n' ||
+	      szString[tLen] == '\0'))) {
+		/* The string already fits, do nothing */
+		return tLen;
+	}
+	/* Search for a breaking point */
+	for (iIndex = (int)tLen - 1; iIndex >= 0; iIndex--) {
+		if (szString[iIndex] == ' ') {
+			return (size_t)iIndex;
+		}
+	}
+	/* No breaking point found, just fill the column */
+	return tLen;
+} /* end of tGetBreakingPoint */
 
 /*
  * vTableRow2Window - put a table row into a diagram
@@ -368,11 +511,10 @@ vTableRow2Window(diagram_type *pDiag, output_type *pOutput,
 {
 	output_type	tRow;
 	char	*aszColTxt[TABLE_COLUMN_MAX];
-	char	*szLine, *pcTmp, *pcTxt;
+	char	*szLine, *pcTxt;
 	long	lCharWidthLarge, lCharWidthSmall;
-	size_t	tSize;
-	int	iIndex, iNbrOfColumns, iColumnWidth, iTmp;
-	int	iLen1, iLen2, iLen;
+	size_t	tSize, tColumnWidthMax, tWidth, tLen;
+	int	iIndex, iNbrOfColumns, iTmp;
 	BOOL	bNotReady;
 
 	fail(pDiag == NULL || pOutput == NULL || pRowInfo == NULL);
@@ -381,23 +523,17 @@ vTableRow2Window(diagram_type *pDiag, output_type *pOutput,
 
 	/* Character sizes */
 	lCharWidthLarge = lComputeStringWidth("W", 1,
-				pOutput->tFontRef, pOutput->sFontsize);
+				pOutput->tFontRef, pOutput->usFontSize);
 	NO_DBG_DEC(lCharWidthLarge);
 	lCharWidthSmall = lComputeStringWidth("i", 1,
-				pOutput->tFontRef, pOutput->sFontsize);
+				pOutput->tFontRef, pOutput->usFontSize);
 	NO_DBG_DEC(lCharWidthSmall);
 	/* For the time being: use a fixed width font */
 	fail(lCharWidthLarge != lCharWidthSmall);
 
-	/* Make room for the row */
-	tSize = (size_t)(lTwips2MilliPoints(pRowInfo->iColumnWidthSum) /
-				lCharWidthSmall +
-				(long)pRowInfo->ucNumberOfColumns + 3);
-	szLine = xmalloc(tSize);
-
 	vRemoveRowEnd(pOutput->szStorage);
 
-	/* Split the row text into column texts */
+	/* Split the row text into a set of column texts */
 	aszColTxt[0] = pOutput->szStorage;
 	for (iNbrOfColumns = 1;
 	     iNbrOfColumns < TABLE_COLUMN_MAX;
@@ -420,84 +556,101 @@ vTableRow2Window(diagram_type *pDiag, output_type *pOutput,
 		pRowInfo->ucNumberOfColumns);
 	if (iNbrOfColumns != (int)pRowInfo->ucNumberOfColumns) {
 		werr(0, "Skipping an unmatched table row");
-		/* Clean up before you leave */
-		szLine = xfree(szLine);
 		return;
 	}
 
+	if (bAddTableRow(pDiag, aszColTxt, iNbrOfColumns,
+			pRowInfo->asColumnWidth, pRowInfo->ucBorderInfo)) {
+		/* All work has been done */
+		return;
+	}
+
+	/*
+	 * Get enough space for the row.
+	 * Worst case: three bytes per UTF-8 character
+	 */
+	tSize = 3 * (size_t)(lTwips2MilliPoints(pRowInfo->iColumnWidthSum) /
+				lCharWidthSmall +
+				(long)pRowInfo->ucNumberOfColumns + 3);
+	szLine = xmalloc(tSize);
+
 	do {
-		/* Print a table row line */
+		/* Print one line of a table row */
 		bNotReady = FALSE;
 		pcTxt = szLine;
 		*pcTxt++ = TABLE_SEPARATOR_CHAR;
 		for (iIndex = 0; iIndex < iNbrOfColumns; iIndex++) {
-			iColumnWidth =
-				(int)(lTwips2MilliPoints(
+			tColumnWidthMax =
+				(size_t)(lTwips2MilliPoints(
 					pRowInfo->asColumnWidth[iIndex]) /
 					lCharWidthLarge);
-			fail(iColumnWidth < 0);
-			if (iColumnWidth < 1) {
+			if (tColumnWidthMax == 0) {
 				/* Minimum column width */
-				iColumnWidth = 1;
-			} else if (iColumnWidth > 1) {
-				/* Room for the TABLE_SEPARATOR_CHAR */
-				iColumnWidth--;
+				tColumnWidthMax = 1;
+			} else if (tColumnWidthMax > 1) {
+				/* Make room for the TABLE_SEPARATOR_CHAR */
+				tColumnWidthMax--;
 			}
-			NO_DBG_DEC(iColumnWidth);
-			/* Compute the length of the text for a column */
+			NO_DBG_DEC(tColumnWidthMax);
 			if (aszColTxt[iIndex] == NULL) {
-				iLen = 0;
-			} else {
-				pcTmp = strchr(aszColTxt[iIndex], '\n');
-				if (pcTmp == NULL) {
-					iLen1 = INT_MAX;
-				} else {
-					iLen1 =
-					pcTmp - aszColTxt[iIndex] + 1;
+				/* Add an empty column */
+				for (iTmp = 0;
+				     iTmp < (int)tColumnWidthMax;
+				     iTmp++) {
+					*pcTxt++ = (char)FILLER_CHAR;
 				}
-				iLen2 = (int)strlen(aszColTxt[iIndex]);
-				if (iLen2 > iColumnWidth) {
-					iLen2 = iColumnWidth;
-				}
-				iLen = min(iLen1, iLen2);
+				*pcTxt++ = TABLE_SEPARATOR_CHAR;
+				*pcTxt = '\0';
+				continue;
 			}
-			NO_DBG_DEC(iLen);
-			fail(iLen < 0 || iLen > iColumnWidth);
-			if (iLen >= 1 &&
-			    aszColTxt[iIndex][iLen - 1] == '\n') {
-				aszColTxt[iIndex][iLen - 1] = ' ';
+			/* Compute the length and width of the column text */
+			tLen = tComputeStringLengthMax(
+					aszColTxt[iIndex], tColumnWidthMax);
+			NO_DBG_DEC(tLen);
+			while (tLen != 0 &&
+					(aszColTxt[iIndex][tLen - 1] == '\n' ||
+					 aszColTxt[iIndex][tLen - 1] == ' ')) {
+				aszColTxt[iIndex][tLen - 1] = ' ';
+				tLen--;
 			}
-			if (iLen == iColumnWidth &&
-			    !isspace(aszColTxt[iIndex][iLen])) {
-				/* Search for a breaking point */
-				for (iTmp = iLen - 1; iTmp >= 0; iTmp--) {
-					if (isspace(aszColTxt[iIndex][iTmp])) {
-						/* Found a breaking point */
-						iLen = iTmp + 1;
-						NO_DBG_DEC(iLen);
-						break;
-					}
-				}
-			}
-			/* Print the text */
-			if (iLen <= 0) {
+			tWidth = tCountColumns(aszColTxt[iIndex], tLen);
+			fail(tWidth > tColumnWidthMax);
+			tLen = tGetBreakingPoint(aszColTxt[iIndex],
+					tLen, tWidth, tColumnWidthMax);
+			tWidth = tCountColumns(aszColTxt[iIndex], tLen);
+			if (tLen == 0 && *aszColTxt[iIndex] == '\0') {
+				/* No text at all */
 				aszColTxt[iIndex] = NULL;
 			} else {
+				/* Add the text */
 				pcTxt += sprintf(pcTxt,
-					"%.*s", iLen, aszColTxt[iIndex]);
-				aszColTxt[iIndex] += iLen;
+					"%.*s", (int)tLen, aszColTxt[iIndex]);
+				if (tLen == 0 && *aszColTxt[iIndex] != ' ') {
+					tLen = tGetCharacterLength(
+							aszColTxt[iIndex]);
+					DBG_CHR(*aszColTxt[iIndex]);
+					DBG_FIXME();
+					fail(tLen == 0);
+				}
+				aszColTxt[iIndex] += tLen;
 				while (*aszColTxt[iIndex] == ' ') {
 					aszColTxt[iIndex]++;
 				}
-				if (*aszColTxt[iIndex] != '\0') {
-					/* The row takes more lines */
+				if (*aszColTxt[iIndex] == '\0') {
+					/* This row is now complete */
+					aszColTxt[iIndex] = NULL;
+				} else {
+					/* This row needs more lines */
 					bNotReady = TRUE;
 				}
 			}
-			/* Print the filler */
-			for (iTmp = 0; iTmp < iColumnWidth - iLen; iTmp++) {
+			/* Fill up the rest */
+			for (iTmp = 0;
+			     iTmp < (int)tColumnWidthMax - (int)tWidth;
+			     iTmp++) {
 				*pcTxt++ = (char)FILLER_CHAR;
 			}
+			/* End of column */
 			*pcTxt++ = TABLE_SEPARATOR_CHAR;
 			*pcTxt = '\0';
 		}
@@ -505,12 +658,13 @@ vTableRow2Window(diagram_type *pDiag, output_type *pOutput,
 		*pcTxt = '\0';
 		tRow = *pOutput;
 		tRow.szStorage = szLine;
-		tRow.iNextFree = pcTxt - szLine;
+		fail(pcTxt < szLine);
+		tRow.tNextFree = (size_t)(pcTxt - szLine);
 		tRow.lStringWidth = lComputeStringWidth(
 					tRow.szStorage,
-					tRow.iNextFree,
+					tRow.tNextFree,
 					tRow.tFontRef,
-					tRow.sFontsize);
+					tRow.usFontSize);
 		vString2Diagram(pDiag, &tRow);
 	} while (bNotReady);
 	/* Clean up before you leave */

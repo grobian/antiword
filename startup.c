@@ -1,9 +1,9 @@
 /*
  * startup.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2001 A.J. van Os; Released under GPL
  *
  * Description:
- * Guarantee a single startup of !AntiWord
+ * Try to force a single startup of !Antiword
  */
 
 #include <stdlib.h>
@@ -21,9 +21,29 @@
 #endif /* TaskManager_EnumerateTasks */
 
 /*
- * tGetTaskHandle - get the taskhandle of the given task
+ * bIsMatch - decide whether the two strings match
  *
- * returns the taskhandle when found, otherwise 0
+ * like strcmp, but this one ignores case
+ */
+static BOOL
+bIsMatch(const char *szStr1, const char *szStr2)
+{
+	const char	*pcTmp1, *pcTmp2;
+
+	for (pcTmp1 = szStr1, pcTmp2 = szStr2;
+	     *pcTmp1 != '\0';
+	     pcTmp1++, pcTmp2++) {
+		if (toupper(*pcTmp1) != toupper(*pcTmp2)) {
+			return FALSE;
+		}
+	}
+	return *pcTmp2 == '\0';
+} /* end of bIsMatch */
+
+/*
+ * tGetTaskHandle - get the task handle of the given task
+ *
+ * returns the task handle when found, otherwise 0
  */
 static wimp_t
 tGetTaskHandle(const char *szTaskname, int iOSVersion)
@@ -33,18 +53,19 @@ tGetTaskHandle(const char *szTaskname, int iOSVersion)
 	const char	*pcTmp;
 	int	iIndex;
 	int	aiBuffer[4];
-	char	szTmp[12];
+	char	szTmp[21];
 
 	if (iOSVersion < 310) {
 		/*
 		 * SWI TaskManager_EnumerateTasks does not
-		 * exist in this version of RISC-OS
+		 * exist in earlier versions of RISC OS
 		 */
 		return 0;
 	}
 
 	(void)memset((void *)&regs, 0, sizeof(regs));
 	regs.r[0] = 0;
+
 	do {
 		/* Get info on the next task */
 		regs.r[1] = (int)aiBuffer;
@@ -53,9 +74,9 @@ tGetTaskHandle(const char *szTaskname, int iOSVersion)
 		if (e != NULL) {
 			werr(1, "TaskManager_EnumerateTasks error %d: %s",
 				e->errnum, e->errmess);
-			return EXIT_FAILURE;
+			exit(EXIT_FAILURE);
 		}
-		/* Copy the (control terminated) taskname */
+		/* Copy the (control character terminated) task name */
 		for (iIndex = 0, pcTmp = (const char *)aiBuffer[1];
 		     iIndex < elementsof(szTmp);
 		     iIndex++, pcTmp++) {
@@ -66,12 +87,13 @@ tGetTaskHandle(const char *szTaskname, int iOSVersion)
 			szTmp[iIndex] = *pcTmp;
 		}
 		szTmp[elementsof(szTmp) - 1] = '\0';
-		/* Check for AntiWords' entry */
-		if (STREQ(szTmp, szTaskname)) {
+		if (bIsMatch(szTmp, szTaskname)) {
+			/* Task found */
 			return (wimp_t)aiBuffer[0];
 		}
 	} while (regs.r[0] >= 0);
-	/* Not found */
+
+	/* Task not found */
 	return 0;
 } /* end of tGetTaskHandle */
 
@@ -80,44 +102,46 @@ main(int argc, char **argv)
 {
 	wimp_msgstr	tMsg;
 	wimp_t	tTaskHandle;
-	int	iArgLen, iVersion;
+	size_t	tArgLen;
+	int	iVersion;
 	char	szCommand[512];
 
 	iVersion = wimpt_init("StartUp");
 
 	if (argc > 1) {
-		iArgLen = strlen(argv[1]);
+		tArgLen = strlen(argv[1]);
 	} else {
-		iArgLen = 0;
+		tArgLen = 0;
 	}
-	if (iArgLen >= sizeof(tMsg.data.dataload.name)) {
+	if (tArgLen >= sizeof(tMsg.data.dataload.name)) {
 		werr(1, "Input filename too long");
 		return EXIT_FAILURE;
 	}
 
-	tTaskHandle = tGetTaskHandle("AntiWord", iVersion);
+	tTaskHandle = tGetTaskHandle("antiword", iVersion);
 
 	if (tTaskHandle == 0) {
-		/* AntiWord is not active */
-		strcpy(szCommand, "chain:<AntiWord$Dir>.!AntiWord");
+		/* Antiword is not active */
+		strcpy(szCommand, "chain:<Antiword$Dir>.!Antiword");
 		if (argc > 1) {
 			strcat(szCommand, " ");
 			strcat(szCommand, argv[1]);
 		}
 #if defined(DEBUG)
 		strcat(szCommand, " ");
-		strcat(szCommand, "2><AntiWord$Dir>.Debug");
+		strcat(szCommand, "2><Antiword$Dir>.Debug");
 #endif /* DEBUG */
 		system(szCommand);
 		/* If we reach here something has gone wrong */
 		return EXIT_FAILURE;
 	}
-	/* AntiWord is active */
+
+	/* Antiword is active */
 	if (argc > 1) {
-		/* Send the argument to AntiWord */
-		tMsg.hdr.size = MakeFour(sizeof(tMsg) -
+		/* Send the argument to Antiword */
+		tMsg.hdr.size = ROUND4(sizeof(tMsg) -
 					sizeof(tMsg.data.dataload.name) +
-					1 + iArgLen);
+					1 + tArgLen);
 		tMsg.hdr.your_ref = 0;
 		tMsg.hdr.action = wimp_MDATALOAD;
 		tMsg.data.dataload.w = -1;
@@ -126,9 +150,10 @@ main(int argc, char **argv)
 		strcpy(tMsg.data.dataload.name, argv[1]);
 		wimpt_noerr(wimp_sendmessage(wimp_ESEND,
 						&tMsg, tTaskHandle));
+		return EXIT_SUCCESS;
 	} else {
-		/* Give an errormessage and end */
-		werr(1, "AntiWord is already running");
+		/* Give an error message and return */
+		werr(1, "Antiword is already running");
+		return EXIT_FAILURE;
 	}
-	return EXIT_SUCCESS;
 } /* end of main */

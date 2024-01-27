@@ -3,7 +3,7 @@
  *
  * Released under GPL
  *
- * Copyright (C) 1998-2000 A.J. van Os
+ * Copyright (C) 1998-2003 A.J. van Os
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,7 +20,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  *
  * Description:
- * The main program of !AntiWord (RiscOS version)
+ * The main program of !Antiword (RISC OS version)
  */
 
 #include <stdio.h>
@@ -43,7 +43,7 @@
 #include "antiword.h"
 
 /* The name of this program */
-static char	*szTask = "!AntiWord";
+static char	*szTask = "!Antiword";
 
 /* The window handle of the choices window */
 static wimp_w	tChoicesWindow;
@@ -118,14 +118,14 @@ vIconclick(wimp_i tUnused)
 } /* end of vIconclick */
 
 static void
-vSaveSelect(void *pvHandle, char *Input)
+vSaveSelect(void *pvHandle, char *pcInput)
 {
 	diagram_type	*pDiag;
 
-	fail(pvHandle == NULL || Input == NULL);
+	fail(pvHandle == NULL || pcInput == NULL);
 
 	pDiag = (diagram_type *)pvHandle;
-	switch (*Input) {
+	switch (pcInput[0]) {
 	case 1:
 		vScaleOpenAction(pDiag);
 		break;
@@ -136,7 +136,7 @@ vSaveSelect(void *pvHandle, char *Input)
 		vSaveTextfile(pDiag);
 		break;
 	default:
-		DBG_DEC(*Input);
+		DBG_DEC(pcInput[0]);
 		break;
 	}
 } /* end of vMenuSelect */
@@ -185,39 +185,66 @@ static void
 vProcessFile(const char *szFilename, int iFiletype)
 {
 	options_type	tOptions;
+	FILE		*pFile;
 	diagram_type	*pDiag;
+	long		lFilesize;
+	int		iWordVersion;
 
 	fail(szFilename == NULL || szFilename[0] == '\0');
 
 	DBG_MSG(szFilename);
 
-	if (!bIsSupportedWordFile(szFilename)) {
-		if (bIsRtfFile(szFilename)) {
+	pFile = fopen(szFilename, "rb");
+	if (pFile == NULL) {
+		werr(0, "I can't open '%s' for reading", szFilename);
+		return;
+	}
+
+	lFilesize = lGetFilesize(szFilename);
+	if (lFilesize < 0) {
+		(void)fclose(pFile);
+		werr(0, "I can't get the size of '%s'", szFilename);
+		return;
+	}
+
+	iWordVersion = iGuessVersionNumber(pFile, lFilesize);
+	if (iWordVersion < 0 || iWordVersion == 3) {
+		if (bIsRtfFile(pFile)) {
 			werr(0, "%s is not a Word Document."
 				" It is probably a Rich Text Format file",
 				szFilename);
-		} else if (bIsWord245File(szFilename)) {
-			werr(0, "%s is not in a supported Word format."
-				" It is probably from 'Word2, 4 or 5'",
+		} if (bIsWordPerfectFile(pFile)) {
+			werr(0, "%s is not a Word Document."
+				" It is probably a Word Perfect file",
 				szFilename);
 		} else {
 			werr(0, "%s is not a Word Document.", szFilename);
 		}
+		(void)fclose(pFile);
 		return;
 	}
+	/* Reset any reading done during file testing */
+	rewind(pFile);
+
 	if (iFiletype != FILETYPE_MSWORD) {
 		vGetOptions(&tOptions);
 		if (tOptions.bAutofiletypeAllowed) {
 			vSetFiletype(szFilename, FILETYPE_MSWORD);
 		}
 	}
+
 	pDiag = pCreateTextWindow(szFilename);
-	if (pDiag != NULL) {
-		vWord2Text(pDiag, szFilename);
-		if (bVerifyDiagram(pDiag)) {
-			vShowDiagram(pDiag);
-		}
+	if (pDiag == NULL) {
+		(void)fclose(pFile);
+		return;
 	}
+
+	(void)bWordDecryptor(pFile, lFilesize, pDiag);
+	if (bVerifyDiagram(pDiag)) {
+		vShowDiagram(pDiag);
+	}
+
+	(void)fclose(pFile);
 } /* end of vProcessFile */
 
 static void
@@ -331,9 +358,6 @@ vInitialise(void)
 		werr(1, "I can't initialise (event_attachmenu)");
 	}
 	win_register_event_handler(win_ICONBARLOAD, vEventHandler, NULL);
-	if (!bISO_8859_1_IsCurrent()) {
-		werr(1, "%s only works with ISO-8859-1 (Latin1)", szTask+1);
-	}
 } /* end of vInitialise */
 
 int
@@ -344,13 +368,13 @@ main(int argc, char **argv)
 	vInitialise();
 	iFirst = iReadOptions(argc, argv);
 	if (iFirst != 1) {
-		exit(EXIT_FAILURE);
+		return EXIT_FAILURE;
 	}
 
 	if (argc > 1) {
 		iFiletype = iGetFiletype(argv[1]);
 		if (iFiletype < 0) {
-			exit(EXIT_FAILURE);
+			return EXIT_FAILURE;
 		}
 		vProcessFile(argv[1], iFiletype);
 	}

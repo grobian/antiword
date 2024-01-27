@@ -1,26 +1,27 @@
-| !Run file for AntiWord
-| (C) Adri van Os 1998,1999
+| !Run file for !Antiword
+| (C) Adri van Os 1998-2003
 |
 if "<System$Path>" = "" then Error 0 System resources cannot be found
 if "<Font$Path>" = "" then Error 0 There are no fonts available
 |
-Set      AntiWord$Dir  <Obey$Dir>
-IconSprites <AntiWord$Dir>.!Sprites
+Set      Antiword$Dir  <Obey$Dir>
+IconSprites <Antiword$Dir>.!Sprites
 |
-SetMacro AntiWord$Path Choices:AntiWord.,<AntiWord$Dir>.,<Wimp$ScrapDir>.AntiWord.
+SetMacro Antiword$Path Choices:Antiword.,<Antiword$Dir>.,<Wimp$ScrapDir>.Antiword.
 |
-SetMacro AntiWord$ChoicesFile AntiWord:Choices
-if "<Choices$Write>" <> "" then Set AntiWord$ChoicesSave <Choices$Write>.AntiWord.Choices else Set AntiWord$ChoicesSave <AntiWord$Dir>.Choices
+SetMacro Antiword$ChoicesFile Antiword:Choices
+if "<Choices$Write>" <> "" then Set Antiword$ChoicesSave <Choices$Write>.Antiword.Choices else Set Antiword$ChoicesSave <Antiword$Dir>.Choices
 |
-SetMacro AntiWord$FontNamesFile AntiWord:FontNames
-if "<Choices$Write>" <> "" then Set AntiWord$FontNamesSave <Choices$Write>.AntiWord.FontNames else Set AntiWord$FontNamesSave <AntiWord$Dir>.FontNames
+SetMacro Antiword$FontNamesFile Antiword:FontNames
+if "<Choices$Write>" <> "" then Set Antiword$FontNamesSave <Choices$Write>.Antiword.FontNames else Set Antiword$FontNamesSave <Antiword$Dir>.FontNames
 |
-Set AntiWord$MappingFile <AntiWord$Dir>.Resources.Unicode
+Set Antiword$Latin1 <Antiword$Dir>.Resources.Unicode01
+Set Antiword$Latin9 <Antiword$Dir>.Resources.Unicode15
 |
 RMEnsure SharedCLibrary 0.00 RMLoad System:Modules.Clib
 RMEnsure SharedCLibrary 3.75 Error You need Clib 3.75 or later
 |
 if "<File$Type_AE6>" = "" then Set File$Type_AE6 MSWord
 |
-WimpSlot -min 192K -max 192K
-Run <AntiWord$Dir>.!RunImage %*0
+WimpSlot -min 260K -max 260K
+Run <Antiword$Dir>.!RunImage %*0

@@ -1,6 +1,6 @@
 /*
  * asc85enc.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000-2003 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to for ASCII 85 encoding
@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include "antiword.h"
 
-static const unsigned long aulPower85[5] = {
+static const ULONG	aulPower85[5] = {
 	1UL, 85UL, 85UL * 85, 85UL * 85 * 85, 85UL * 85 * 85 * 85,
 };
 static int	iOutBytes = 0;	/* Number of characters in an output line */
@@ -36,9 +36,9 @@ static char	cCharPrev = '\0';
  * vOutputByte - output one byte
  */
 static void
-vOutputByte(unsigned long ulChar, FILE *pOutFile)
+vOutputByte(ULONG ulChar, FILE *pOutFile)
 {
-	if (iOutBytes == 1 && cCharPrev == '%' && ulChar == '%') {
+	if (iOutBytes == 1 && cCharPrev == '%' && ulChar == (ULONG)'%') {
 		if (putc('\n', pOutFile) != EOF) {
 			iOutBytes = 0;
 		}
@@ -61,9 +61,9 @@ vOutputByte(unsigned long ulChar, FILE *pOutFile)
 void
 vASCII85EncodeByte(FILE *pOutFile, int iByte)
 {
-	static unsigned long ulBuffer[4] = { 0, 0, 0, 0 };
+	static ULONG	ulBuffer[4] = { 0, 0, 0, 0 };
 	static int	iInBuffer = 0;
-	unsigned long	ulValue, ulTmp;
+	ULONG	ulValue, ulTmp;
 	int	iIndex;
 
 	fail(pOutFile == NULL);
@@ -72,7 +72,7 @@ vASCII85EncodeByte(FILE *pOutFile, int iByte)
 
 	if (iByte == EOF) {
 		/* End Of File, time to clean up */
-		if (iInBuffer > 0) {
+		if (iInBuffer > 0 && iInBuffer < 4) {
 			/* Encode the remaining bytes */
 			ulValue = 0;
 			for (iIndex = iInBuffer - 1; iIndex >= 0; iIndex--) {
@@ -96,14 +96,14 @@ vASCII85EncodeByte(FILE *pOutFile, int iByte)
 		return;
 	}
 
-	ulBuffer[iInBuffer] = (unsigned long)iByte & 0xff;
+	ulBuffer[iInBuffer] = (ULONG)iByte & 0xff;
 	iInBuffer++;
 
 	if (iInBuffer >= 4) {
 		ulValue = (ulBuffer[0] << 24) | (ulBuffer[1] << 16) |
 			(ulBuffer[2] << 8) | ulBuffer[3];
 		if (ulValue == 0) {
-			vOutputByte('z', pOutFile);       /* Shortcut for 0 */
+			vOutputByte((ULONG)'z', pOutFile); /* Shortcut for 0 */
 		} else {
 			for (iIndex = 4; iIndex >= 0; iIndex--) {
 				ulTmp = ulValue / aulPower85[iIndex];
@@ -120,17 +120,17 @@ vASCII85EncodeByte(FILE *pOutFile, int iByte)
  * vASCII85EncodeArray - ASCII 85 encode a byte array
  */
 void
-vASCII85EncodeArray(FILE *pInFile, FILE *pOutFile, int iLength)
+vASCII85EncodeArray(FILE *pInFile, FILE *pOutFile, size_t tLength)
 {
-	int	iCount, iByte;
+	size_t	tCount;
+	int	iByte;
 
 	fail(pInFile == NULL);
 	fail(pOutFile == NULL);
-	fail(iLength < 0);
 
-	DBG_DEC(iLength);
+	DBG_DEC(tLength);
 
-	for (iCount = 0; iCount < iLength; iCount++) {
+	for (tCount = 0; tCount < tLength; tCount++) {
 		iByte = iNextByte(pInFile);
 		if (iByte == EOF) {
 			break;
@@ -143,12 +143,12 @@ vASCII85EncodeArray(FILE *pInFile, FILE *pOutFile, int iLength)
  * vASCII85EncodeFile - ASCII 85 encode part of a file
  */
 void
-vASCII85EncodeFile(FILE *pInFile, FILE *pOutFile, int iLength)
+vASCII85EncodeFile(FILE *pInFile, FILE *pOutFile, size_t tLength)
 {
 	fail(pInFile == NULL);
 	fail(pOutFile == NULL);
-	fail(iLength <= 0);
+	fail(tLength == 0);
 
-	vASCII85EncodeArray(pInFile, pOutFile, iLength);
+	vASCII85EncodeArray(pInFile, pOutFile, tLength);
 	vASCII85EncodeByte(pOutFile, EOF);
 } /* end of vASCII85EncodeFile */

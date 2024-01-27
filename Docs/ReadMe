@@ -1,16 +1,23 @@
-AntiWord
+                    ___        _   _                       _
+                   / _ \      | | (_)                     | |
+                  | |_| |_ __ | |_ ___      _____  _ __ __| |
+                  |  _  | '_ \| __| \ \ /\ / / _ \| '__/ _` |
+                  | | | | | | | |_| |\ V  V / (_) | | | (_| |
+                  |_| |_|_| |_|\__|_| \_/\_/ \___/|_|  \__,_|
+
+Antiword
 ========
 
-Version 0.31 (08 Dec 2000)
+Version 0.35 (14 Nov 2003)
 --------------------------     
 
 Introduction
 ------------
 
-AntiWord is an application to display Microsoft® Word files.
+Antiword is an application for displaying Microsoft(R) Word documents.
 
 
-Licence
+License
 -------
 
 This program is distributed under the GNU General Public License - see the
@@ -23,7 +30,8 @@ Problems
 Any bugs found should be reported to the author with full details of how to
 get the problem to occur, but don't *expect* support for a product that you
 have not paid for!
-Please include AntiWord's version number and version date, otherwise you
+
+Please include Antiword's version number and version date, otherwise you
 make it impossible for the author to help.
 
 
@@ -40,21 +48,31 @@ Thomas Merz <tm@muc.de> creator of "jpeg2ps"
 Ulrich von Zadow <uzadow@cs.tu-berlin.de> creator of "paintlib"
 
 
-Contibuters
------------
+Contributors
+------------
 
 ISO-8859-2 support by: Pawel Turnau <uzturnau@cyf-kr.edu.pl>
 Character set mapping by: Dmitry Chernyak
                           <Dmitry.Chernyak@p998.f983.n5030.z2.fidonet.org>
+UTF-8 support by: Karl Koehler <koehler@or.uni-bonn.de> and
+                  Markus Kuhn <Markus.Kuhn@cl.cam.ac.uk>
 
 
 Ports
 -----
 
-Antiword was ported to BeOS by David Feugey <dfeugey@free.fr>
+Antiword was ported to BeOS by Pete Goodeve <pete@jwgibbs.cchem.berkeley.edu>
 Antiword was ported to OS/2 by Dave Yeo <dave_yeo@mindlink.bc.ca>
-Yen-Ming Lee <leeym@cae.ce.ntu.edu.tw> is the maintainer of the FreeBSD
-version of antiword.
+Antiword was ported to Mac OS X by Ronaldo Nascimento <ronaldo@ronaldo.com>
+Antiword was ported to Amiga by Raffaele Pisapia <rafpis@libero.it>
+Antiword was ported to VMS by Joseph Huber <huber@mppmu.mpg.de>
+Antiword was ported to NetWare by Guenter Knauf <info@gknw.de>
+Antiword was ported to EPOC by Max Tomin <tomin@samaramail.ru>
+Antiword was ported to Zaurus PDA by Piotr Jachimczyk
+                                     <P.Jachimczyk@prioris.mini.pw.edu.pl>
+Antiword was ported to DOS by myself ;-)
+Yen-Ming Lee <leeym@freebsd.org> is the maintainer of the FreeBSD version of
+Antiword.
 
 
 Acknowledgements
@@ -77,25 +95,19 @@ New versions of the program will only be available if sufficient people
 are using this program. So let me know!
 
 
-The most recent version
------------------------
+Most recent version
+-------------------
 
-The most recent version of AntiWord can be found on the authors website:
+Most recent version of Antiword can be found on the author's website:
 ==>>  http://www.winfield.demon.nl/index.html  <<==
-or you might try:
-==>>  http://www.antiword.org/  <<==
+==>>  http://antiword.cjb.net/  <<==
 
 
-The author
-----------
+Author
+------
 
-s-mail:
-A.J. van Os,
-Claus Sluterweg 35,
-NL-2012 WN  Haarlem,
-The Netherlands.
-
-e-mail:
+The author can be reached by e-mail:
 antiword@winfield.demon.nl
-or you might try:
-comments@antiword.org
+comments@antiword.cjb.net
+
+But PLEASE read the FAQ before you write!!

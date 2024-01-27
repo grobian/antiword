@@ -1,6 +1,6 @@
 /*
  * fontlist.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2002 A.J. van Os; Released under GPL
  *
  * Description:
  * Build, read and destroy a list of Word font information
@@ -39,21 +39,57 @@ vDestroyFontInfoList(void)
 } /* end of vDestroyFontInfoList */
 
 /*
+ * vCorrectFontValues - correct font values to values Antiword can use
+ */
+void
+vCorrectFontValues(font_block_type *pFontBlock)
+{
+	UINT	uiRealSize;
+	USHORT	usRealStyle;
+
+	uiRealSize = pFontBlock->usFontSize;
+	usRealStyle = pFontBlock->usFontStyle;
+	if (bIsSmallCapitals(pFontBlock->usFontStyle)) {
+		/* Small capitals become normal capitals in a smaller font */
+		uiRealSize = (uiRealSize * 4 + 2) / 5;
+		usRealStyle &= ~FONT_SMALL_CAPITALS;
+		usRealStyle |= FONT_CAPITALS;
+	}
+	if (bIsSuperscript(pFontBlock->usFontStyle) ||
+	    bIsSubscript(pFontBlock->usFontStyle)) {
+		/* Superscript and subscript use a smaller fontsize */
+		uiRealSize = (uiRealSize * 2 + 1) / 3;
+	}
+
+	if (uiRealSize < MIN_FONT_SIZE) {
+		DBG_DEC(uiRealSize);
+		uiRealSize = MIN_FONT_SIZE;
+	} else if (uiRealSize > MAX_FONT_SIZE) {
+		DBG_DEC(uiRealSize);
+		uiRealSize = MAX_FONT_SIZE;
+	}
+
+	pFontBlock->usFontSize = (USHORT)uiRealSize;
+	if (pFontBlock->ucFontColor == 8) {
+		/* White text to light gray text */
+		pFontBlock->ucFontColor = 16;
+	}
+	pFontBlock->usFontStyle = usRealStyle;
+} /* end of vCorrectFontValues */
+
+/*
  * vAdd2FontInfoList - Add an element to the Font Information List
  */
 void
 vAdd2FontInfoList(const font_block_type *pFontBlock)
 {
 	font_desc_type	*pListMember;
-	int		iRealSize;
-	unsigned char	ucRealStyle;
 
 	fail(pFontBlock == NULL);
-	fail(pFontBlock->lFileOffset < -1);
 
 	NO_DBG_MSG("bAdd2FontInfoList");
 
-	if (pFontBlock->lFileOffset < 0) {
+	if (pFontBlock->ulFileOffset == FC_INVALID) {
 		/*
 		 * This offset is really past the end of the file,
 		 * so don't waste any memory by storing it.
@@ -61,44 +97,18 @@ vAdd2FontInfoList(const font_block_type *pFontBlock)
 		return;
 	}
 
-	iRealSize = pFontBlock->sFontsize;
-	ucRealStyle = pFontBlock->ucFontstyle;
-	if (bIsSmallCapitals(pFontBlock->ucFontstyle)) {
-		/* Small capitals become normal capitals in a smaller font */
-		iRealSize = (iRealSize * 8 + 5) / 10;
-		ucRealStyle &= ~FONT_SMALL_CAPITALS;
-		ucRealStyle |= FONT_CAPITALS;
-	}
-	if (iRealSize < MIN_FONT_SIZE) {
-		iRealSize = MIN_FONT_SIZE;
-	} else if (iRealSize > MAX_FONT_SIZE) {
-		iRealSize = MAX_FONT_SIZE;
-	}
+	NO_DBG_HEX(pFontBlock->ulFileOffset);
+	NO_DBG_DEC_C(pFontBlock->ucFontNumber != 0,
+					pFontBlock->ucFontNumber);
+	NO_DBG_DEC_C(pFontBlock->usFontSize != DEFAULT_FONT_SIZE,
+					pFontBlock->usFontSize);
+	NO_DBG_DEC_C(pFontBlock->ucFontColor != 0,
+					pFontBlock->ucFontColor);
+	NO_DBG_HEX_C(pFontBlock->usFontStyle != 0x00,
+					pFontBlock->usFontStyle);
 
 	if (pFontLast != NULL &&
-	    pFontLast->tInfo.ucFontnumber == pFontBlock->ucFontnumber &&
-	    pFontLast->tInfo.sFontsize == iRealSize &&
-	    pFontLast->tInfo.ucFontcolor == pFontBlock->ucFontcolor &&
-	    pFontLast->tInfo.ucFontstyle == ucRealStyle) {
-		/*
-		 * The new record would be the same as the one last added
-		 * to the list and is therefore redundant
-		 */
-		return;
-	}
-
-	NO_DBG_HEX(pFontBlock->iFileOffset);
-	NO_DBG_DEC_C(pFontBlock->ucFontnumber != 0,
-					pFontBlock->ucFontnumber);
-	NO_DBG_DEC_C(pFontBlock->sFontsize != DEFAULT_FONT_SIZE,
-					pFontBlock->sFontsize);
-	NO_DBG_DEC_C(pFontBlock->ucFontcolor != 0,
-					pFontBlock->ucFontcolor);
-	NO_DBG_HEX_C(pFontBlock->ucFontstyle != 0x00,
-					pFontBlock->ucFontstyle);
-
-	if (pFontLast != NULL &&
-	    pFontLast->tInfo.lFileOffset == pFontBlock->lFileOffset) {
+	    pFontLast->tInfo.ulFileOffset == pFontBlock->ulFileOffset) {
 		/*
 		 * If two consecutive fonts share the same
 		 * offset, remember only the last font
@@ -114,8 +124,7 @@ vAdd2FontInfoList(const font_block_type *pFontBlock)
 	pListMember->tInfo = *pFontBlock;
 	pListMember->pNext = NULL;
 	/* Correct the values where needed */
-	pListMember->tInfo.sFontsize = (short)iRealSize;
-	pListMember->tInfo.ucFontstyle = ucRealStyle;
+	vCorrectFontValues(&pListMember->tInfo);
 	/* Add the new member to the list */
 	if (pAnchor == NULL) {
 		pAnchor = pListMember;
@@ -125,48 +134,6 @@ vAdd2FontInfoList(const font_block_type *pFontBlock)
 	}
 	pFontLast = pListMember;
 } /* end of vAdd2FontInfoList */
-
-/*
- * vReset2FontInfoList - Add a reset element to the Font Information List
- */
-void
-vReset2FontInfoList(long lFileOffset)
-{
-	font_block_type	tFontBlock;
-
-	fail(lFileOffset < -1);
-
-	NO_DBG_MSG("bReset2FontInfoList");
-
-	if (lFileOffset < 0) {
-		/*
-		 * This offset is really past the end of the file,
-		 * so don't waste any memory by storing it.
-		 */
-		return;
-	}
-
-	if (pFontLast == NULL) {
-		/* There are no values to reset */
-		return;
-	}
-	if (pFontLast->tInfo.ucFontstyle == FONT_REGULAR &&
-	    pFontLast->tInfo.sFontsize == DEFAULT_FONT_SIZE &&
-	    pFontLast->tInfo.ucFontnumber == 0 &&
-	    pFontLast->tInfo.ucFontcolor == FONT_COLOR_DEFAULT) {
-		/* All values are at their defaults, no reset is needed */
-		return;
-	}
-	/* Copy and set the default values */
-	tFontBlock = pFontLast->tInfo;
-	tFontBlock.lFileOffset = lFileOffset;
-	tFontBlock.ucFontnumber = 0;
-	tFontBlock.sFontsize = DEFAULT_FONT_SIZE;
-	tFontBlock.ucFontcolor = FONT_COLOR_DEFAULT;
-	tFontBlock.ucFontstyle = FONT_REGULAR;
-	/* Add the block to the list */
-	vAdd2FontInfoList(&tFontBlock);
-} /* end of vReset2FontInfoList */
 
 /*
  * Get the record that follows the given recored in the Font Information List

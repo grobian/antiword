@@ -1,6 +1,6 @@
 /*
  * draw.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to deal with the Draw format
@@ -17,20 +17,23 @@
 #include "win.h"
 #include "antiword.h"
 
-/* The work area must be a litte bit larger than the diagram */
-#define WORKAREA_EXTENTION	    5
+
+/* The work area must be a little bit larger than the diagram */
+#define WORKAREA_EXTENSION	    5
 /* Diagram memory */
 #define INITIAL_SIZE		32768	/* 32k */
-#define EXTENTION_SIZE		 4096	/*  4k */
+#define EXTENSION_SIZE		 4096	/*  4k */
 /* Main window title */
 #define WINDOW_TITLE_LEN	   28
 #define FILENAME_TITLE_LEN	(WINDOW_TITLE_LEN - 10)
 
+static BOOL	(*bDrawRenderDiag)(draw_diag *,
+			draw_redrawstr *, double, draw_error *) = NULL;
 
 /*
- * vCreateMainWindow - create the MainWindow
+ * vCreateMainWindow - create the Main window
  *
- * remark: does not return if the MainWindow can't be created
+ * remark: does not return if the Main window can't be created
  */
 static wimp_w
 tCreateMainWindow(void)
@@ -57,8 +60,9 @@ tCreateMainWindow(void)
 		werr(1, "The 'MainWindow' title needs %d characters",
 			WINDOW_TITLE_LEN);
 	}
+
 	/*
-	 * Leave 48 OS units between two windows, as recommanded by the
+	 * Leave 48 OS units between two windows, as recommended by the
 	 * Style guide. And try to stay away from the iconbar.
 	 */
 	if (pTemplate->window.box.y0 < iY + 130) {
@@ -68,15 +72,16 @@ tCreateMainWindow(void)
 		pTemplate->window.box.y1 -= iY;
 		iY += 48;
 	}
+
 	/* Create the window */
 	wimpt_noerr(wimp_create_wind(&pTemplate->window, &tMainWindow));
 	return tMainWindow;
 } /* end of tCreateMainWindow */
 
 /*
- * vCreateScaleWindow - create the Scale view Window
+ * vCreateScaleWindow - create the Scale view window
  *
- * remark: does not return if the Scale view Window can't be created
+ * remark: does not return if the Scale view window can't be created
  */
 static wimp_w
 tCreateScaleWindow(void)
@@ -109,8 +114,9 @@ pCreateDiagram(const char *szTask, const char *szFilename)
 
 	fail(szTask == NULL || szTask[0] == '\0');
 
-	/* Create the mainwindow */
+	/* Create the main window */
 	tMainWindow = tCreateMainWindow();
+
 	/* Create the scale view window */
 	tScaleWindow = tCreateScaleWindow();
 
@@ -119,8 +125,18 @@ pCreateDiagram(const char *szTask, const char *szFilename)
 	if (flex_alloc((flex_ptr)&pDiag->tInfo.data, INITIAL_SIZE) != 1) {
 		werr(1, "Memory allocation failed, unable to continue");
 	}
-	vGetOptions(&tOptions);
+
+	/* Determine which function to use for rendering the diagram */
+	if (iGetRiscOsVersion() >= 360) {
+		/* Home brew for RISC OS 3.6 functionality */
+	  	bDrawRenderDiag = bDrawRenderDiag360;
+	  } else {
+		/* The function from RISC_OSLib */
+		bDrawRenderDiag = draw_render_diag;
+	}
+
 	/* Initialize the diagram */
+	vGetOptions(&tOptions);
 	pDiag->tMainWindow = tMainWindow;
 	pDiag->tScaleWindow = tScaleWindow;
 	pDiag->iScaleFactorCurr = tOptions.iScaleFactor;
@@ -135,7 +151,7 @@ pCreateDiagram(const char *szTask, const char *szFilename)
 	pDiag->lXleft = 0;
 	pDiag->lYtop = 0;
 	strncpy(pDiag->szFilename,
-			szBasename(szFilename), sizeof(pDiag->szFilename));
+			szBasename(szFilename), sizeof(pDiag->szFilename) - 1);
 	pDiag->szFilename[sizeof(pDiag->szFilename) - 1] = '\0';
 	/* Return success */
 	return pDiag;
@@ -147,14 +163,26 @@ pCreateDiagram(const char *szTask, const char *szFilename)
 static void
 vDestroyDiagram(wimp_w tWindow, diagram_type *pDiag)
 {
+	wimp_wstate	tWindowState;
+
 	DBG_MSG("vDestroyDiagram");
 
 	fail(pDiag != NULL && pDiag->tMainWindow != tWindow);
 
+	/* Close the main window */
 	wimpt_noerr(wimp_close_wind(tWindow));
 	if (pDiag == NULL) {
 		return;
 	}
+
+	/* Close the scale window if it's open */
+	wimpt_noerr(wimp_get_wind_state(pDiag->tScaleWindow, &tWindowState));
+	if ((tWindowState.flags & wimp_WOPEN) == wimp_WOPEN) {
+		DBG_MSG("Close scale window");
+		wimpt_noerr(wimp_close_wind(pDiag->tScaleWindow));
+	}
+
+	/* Free the memory */
 	if (pDiag->tInfo.data != NULL && pDiag->tMemorySize != 0) {
 		flex_free((flex_ptr)&pDiag->tInfo.data);
 	}
@@ -200,19 +228,19 @@ vExtendDiagramSize(diagram_type *pDiag, size_t tSize)
 
 	while (pDiag->tInfo.length + tSize > pDiag->tMemorySize) {
 		if (flex_extend((flex_ptr)&pDiag->tInfo.data,
-				pDiag->tMemorySize + EXTENTION_SIZE) != 1) {
+				pDiag->tMemorySize + EXTENSION_SIZE) != 1) {
 			werr(1, "Memory extend failed, unable to continue");
 		}
-		pDiag->tMemorySize += EXTENTION_SIZE;
-		DBG_DEC(pDiag->tMemorySize);
+		pDiag->tMemorySize += EXTENSION_SIZE;
+		NO_DBG_DEC(pDiag->tMemorySize);
 	}
 } /* end of vExtendDiagramSize */
 
 /*
- * vAddFonts2Diagram - add a fontlist to a diagram
+ * vPrologue2 - prologue part 2; add a font list to a diagram
  */
 void
-vAddFonts2Diagram(diagram_type *pDiag)
+vPrologue2(diagram_type *pDiag, int iWordVersion)
 {
 	draw_objectType	tNew;
 	draw_error	tError;
@@ -232,7 +260,7 @@ vAddFonts2Diagram(diagram_type *pDiag)
 	while ((pTmp = pGetNextFontTableRecord(pTmp)) != NULL) {
 		tRealSize += 2 + strlen(pTmp->szOurFontname);
 	}
-	tSize = MakeFour(tRealSize);
+	tSize = ROUND4(tRealSize);
 	vExtendDiagramSize(pDiag, tSize);
 	tNew.fontList = xmalloc(tSize);
 	tNew.fontList->tag = draw_OBJFONTLIST;
@@ -246,12 +274,7 @@ vAddFonts2Diagram(diagram_type *pDiag)
 		strcpy(pcTmp, pTmp->szOurFontname);
 		pcTmp += 1 + strlen(pTmp->szOurFontname);
 	}
-	for (iCount = (int)tRealSize,
-	      pcTmp = (char *)tNew.fontList + tRealSize;
-	     iCount < (int)tSize;
-	     iCount++, pcTmp++) {
-		*pcTmp = '\0';
-	}
+	memset((char *)tNew.fontList + tRealSize, 0, tSize - tRealSize);
 	if (draw_createObject(&pDiag->tInfo, tNew, draw_LastObject,
 						TRUE, &tHandle, &tError)) {
 		draw_translateText(&pDiag->tInfo);
@@ -260,33 +283,31 @@ vAddFonts2Diagram(diagram_type *pDiag)
 		vPrintDrawError(&tError);
 	}
 	tNew.fontList = xfree(tNew.fontList);
-} /* end of vAddFonts2Diagram */
+} /* end of vPrologue2 */
 
 /*
- * vSubstring2Diagram - put a substring into a diagram
+ * vSubstring2Diagram - put a sub string into a diagram
  */
 void
 vSubstring2Diagram(diagram_type *pDiag,
-	char *szString, int iStringLength, long lStringWidth,
-	int iColor, unsigned char ucFontstyle, draw_fontref tFontRef,
-	int iFontsize, int iMaxFontsize)
+	char *szString, size_t tStringLength, long lStringWidth,
+	UCHAR ucFontColor, USHORT usFontstyle, draw_fontref tFontRef,
+	USHORT usFontSize, USHORT usMaxFontSize)
 {
 	draw_objectType	tNew;
 	draw_error	tError;
 	draw_object	tHandle;
-	char	*pcTmp;
-	long	lSizeX, lSizeY, lOffset, l20;
+	long	lSizeX, lSizeY, lOffset, l20, lYMove;
 	size_t	tRealSize, tSize;
-	int	iCount;
 
 	fail(pDiag == NULL || szString == NULL);
 	fail(pDiag->lXleft < 0);
-	fail(iStringLength != strlen(szString));
-	fail(iFontsize < MIN_FONT_SIZE || iFontsize > MAX_FONT_SIZE);
-	fail(iMaxFontsize < MIN_FONT_SIZE || iMaxFontsize > MAX_FONT_SIZE);
-	fail(iFontsize > iMaxFontsize);
+	fail(tStringLength != strlen(szString));
+	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
+	fail(usMaxFontSize < MIN_FONT_SIZE || usMaxFontSize > MAX_FONT_SIZE);
+	fail(usFontSize > usMaxFontSize);
 
-	if (szString[0] == '\0' || iStringLength <= 0) {
+	if (szString[0] == '\0' || tStringLength == 0) {
 		return;
 	}
 
@@ -296,23 +317,34 @@ vSubstring2Diagram(diagram_type *pDiag,
 		lSizeX = draw_screenToDraw(16);
 		lSizeY = draw_screenToDraw(32);
 	} else {
-		lOffset = lToBaseLine(iMaxFontsize);
-		l20 = lWord2DrawUnits20(iMaxFontsize);
-		lSizeX = lWord2DrawUnits00(iFontsize);
-		lSizeY = lWord2DrawUnits00(iFontsize);
+		lOffset = lToBaseLine(usMaxFontSize);
+		l20 = lWord2DrawUnits20(usMaxFontSize);
+		lSizeX = lWord2DrawUnits00(usFontSize);
+		lSizeY = lWord2DrawUnits00(usFontSize);
 	}
 
-	tRealSize = sizeof(draw_textstr) + iStringLength;
-	tSize = MakeFour(tRealSize);
+	lYMove = 0;
+
+	/* Up for superscript */
+	if (bIsSuperscript(usFontstyle)) {
+		lYMove = lMilliPoints2DrawUnits((((long)usFontSize + 1) / 2) * 375);
+	}
+	/* Down for subscript */
+	if (bIsSubscript(usFontstyle)) {
+		lYMove = -lMilliPoints2DrawUnits((long)usFontSize * 125);
+	}
+
+	tRealSize = sizeof(draw_textstr) + tStringLength;
+	tSize = ROUND4(tRealSize);
 	vExtendDiagramSize(pDiag, tSize);
 	tNew.text = xmalloc(tSize);
 	tNew.text->tag = draw_OBJTEXT;
 	tNew.text->size = tSize;
 	tNew.text->bbox.x0 = (int)pDiag->lXleft;
-	tNew.text->bbox.y0 = (int)pDiag->lYtop;
+	tNew.text->bbox.y0 = (int)(pDiag->lYtop + lYMove);
 	tNew.text->bbox.x1 = (int)(pDiag->lXleft + lStringWidth);
-	tNew.text->bbox.y1 = (int)(pDiag->lYtop + l20);
-	tNew.text->textcolour = uiColor2Color(iColor);
+	tNew.text->bbox.y1 = (int)(pDiag->lYtop + l20 + lYMove);
+	tNew.text->textcolour = (draw_coltyp)ulColor2Color(ucFontColor);
 	tNew.text->background = 0xffffff00;	/* White */
 	tNew.text->textstyle.fontref = tFontRef;
 	tNew.text->textstyle.reserved8 = 0;
@@ -320,14 +352,10 @@ vSubstring2Diagram(diagram_type *pDiag,
 	tNew.text->fsizex = (int)lSizeX;
 	tNew.text->fsizey = (int)lSizeY;
 	tNew.text->coord.x = (int)pDiag->lXleft;
-	tNew.text->coord.y = (int)(pDiag->lYtop + lOffset);
-	strncpy(tNew.text->text, szString, iStringLength);
-	tNew.text->text[iStringLength] = '\0';
-	for (iCount = (int)tRealSize, pcTmp = (char *)tNew.text + tRealSize;
-	     iCount < (int)tSize;
-	     iCount++, pcTmp++) {
-		*pcTmp = '\0';
-	}
+	tNew.text->coord.y = (int)(pDiag->lYtop + lOffset + lYMove);
+	strncpy(tNew.text->text, szString, tStringLength);
+	tNew.text->text[tStringLength] = '\0';
+	memset((char *)tNew.text + tRealSize, 0, tSize - tRealSize);
 	if (!draw_createObject(&pDiag->tInfo, tNew, draw_LastObject,
 						TRUE, &tHandle, &tError)) {
 		DBG_MSG("draw_createObject() failed");
@@ -342,53 +370,106 @@ vSubstring2Diagram(diagram_type *pDiag,
  * vImage2Diagram - put an image into a diagram
  */
 void
-vImage2Diagram(diagram_type *pDiag, long lWidth, long lHeight,
-	unsigned char *pucSprite, size_t tSpriteSize)
+vImage2Diagram(diagram_type *pDiag, const imagedata_type *pImg,
+	UCHAR *pucImage, size_t tImageSize)
 {
-  	draw_objectType	tNew;
+  	draw_objectType	tTmp;
+  	draw_imageType	tNew;
 	draw_error	tError;
 	draw_object	tHandle;
-	char	*pcTmp;
+	long	lWidth, lHeight;
 	size_t	tRealSize, tSize;
-	int	iCount;
 
 	DBG_MSG("vImage2Diagram");
 
 	fail(pDiag == NULL);
+	fail(pImg == NULL);
 	fail(pDiag->lXleft < 0);
+	fail(pImg->eImageType != imagetype_is_dib &&
+	     pImg->eImageType != imagetype_is_jpeg);
 
 	DBG_DEC_C(pDiag->lXleft != 0, pDiag->lXleft);
+
+	lWidth = lPoints2DrawUnits(pImg->iHorSizeScaled);
+	lHeight = lPoints2DrawUnits(pImg->iVerSizeScaled);
+	DBG_DEC(lWidth);
+	DBG_DEC(lHeight);
+
 	pDiag->lYtop -= lHeight;
 
-	tRealSize = sizeof(draw_spristrhdr) + tSpriteSize;
-	tSize = MakeFour(tRealSize);
-	vExtendDiagramSize(pDiag, tSize);
-	tNew.sprite = xmalloc(tSize);
-	tNew.sprite->tag = draw_OBJSPRITE;
-	tNew.sprite->size = tSize;
-	tNew.sprite->bbox.x0 = (int)pDiag->lXleft;
-	tNew.sprite->bbox.y0 = (int)pDiag->lYtop;
-	tNew.sprite->bbox.x1 = (int)(pDiag->lXleft + lWidth);
-	tNew.sprite->bbox.y1 = (int)(pDiag->lYtop + lHeight);
-	memcpy(&tNew.sprite->sprite, pucSprite, tSpriteSize);
-	for (iCount = (int)tRealSize, pcTmp = (char *)tNew.sprite + tRealSize;
-	     iCount < (int)tSize;
-	     iCount++, pcTmp++) {
-		*pcTmp = '\0';
+	switch (pImg->eImageType) {
+	case imagetype_is_dib:
+		tRealSize = sizeof(draw_spristrhdr) + tImageSize;
+		tSize = ROUND4(tRealSize);
+		vExtendDiagramSize(pDiag, tSize);
+		tNew.sprite = xmalloc(tSize);
+		tNew.sprite->tag = draw_OBJSPRITE;
+		tNew.sprite->size = tSize;
+		tNew.sprite->bbox.x0 = (int)pDiag->lXleft;
+		tNew.sprite->bbox.y0 = (int)pDiag->lYtop;
+		tNew.sprite->bbox.x1 = (int)(pDiag->lXleft + lWidth);
+		tNew.sprite->bbox.y1 = (int)(pDiag->lYtop + lHeight);
+		memcpy(&tNew.sprite->sprite, pucImage, tImageSize);
+		memset((char *)tNew.sprite + tRealSize, 0, tSize - tRealSize);
+		break;
+	case imagetype_is_jpeg:
+#if defined(DEBUG)
+		(void)bGetJpegInfo(pucImage, tImageSize);
+#endif /* DEBUG */
+		tRealSize = sizeof(draw_jpegstrhdr) + tImageSize;
+		tSize = ROUND4(tRealSize);
+		vExtendDiagramSize(pDiag, tSize);
+		tNew.jpeg = xmalloc(tSize);
+		tNew.jpeg->tag = draw_OBJJPEG;
+		tNew.jpeg->size = tSize;
+		tNew.jpeg->bbox.x0 = (int)pDiag->lXleft;
+		tNew.jpeg->bbox.y0 = (int)pDiag->lYtop;
+		tNew.jpeg->bbox.x1 = (int)(pDiag->lXleft + lWidth);
+		tNew.jpeg->bbox.y1 = (int)(pDiag->lYtop + lHeight);
+		tNew.jpeg->width = (int)lWidth;
+		tNew.jpeg->height = (int)lHeight;
+		tNew.jpeg->xdpi = 90;
+		tNew.jpeg->ydpi = 90;
+		tNew.jpeg->trfm[0] = 0x10000;
+		tNew.jpeg->trfm[1] = 0;
+		tNew.jpeg->trfm[2] = 0;
+		tNew.jpeg->trfm[3] = 0x10000;
+		tNew.jpeg->trfm[4] = (int)pDiag->lXleft;
+		tNew.jpeg->trfm[5] = (int)pDiag->lYtop;
+		tNew.jpeg->len = tImageSize;
+		memcpy(&tNew.jpeg->jpeg, pucImage, tImageSize);
+		memset((char *)tNew.jpeg + tRealSize, 0, tSize - tRealSize);
+		break;
+	default:
+		DBG_DEC(pImg->eImageType);
+		break;
 	}
-	if (!draw_createObject(&pDiag->tInfo, tNew, draw_LastObject,
+
+	tTmp = *(draw_objectType *)&tNew;
+	if (!draw_createObject(&pDiag->tInfo, tTmp, draw_LastObject,
 						TRUE, &tHandle, &tError)) {
 		DBG_MSG("draw_createObject() failed");
 		vPrintDrawError(&tError);
 	}
-	tNew.sprite = xfree(tNew.sprite);
+
+	switch (pImg->eImageType) {
+	case imagetype_is_dib:
+		tNew.sprite = xfree(tNew.sprite);
+		break;
+	case imagetype_is_jpeg:
+		tNew.jpeg = xfree(tNew.jpeg);
+		break;
+	default:
+		DBG_DEC(pImg->eImageType);
+		break;
+	}
 	pDiag->lXleft = 0;
 } /* end of vImage2Diagram */
 
 /*
  * bAddDummyImage - add a dummy image
  *
- * return TRUE when sucessful, otherwise FALSE
+ * return TRUE when successful, otherwise FALSE
  */
 BOOL
 bAddDummyImage(diagram_type *pDiag, const imagedata_type *pImg)
@@ -397,9 +478,8 @@ bAddDummyImage(diagram_type *pDiag, const imagedata_type *pImg)
 	draw_error	tError;
 	draw_object	tHandle;
 	int	*piTmp;
-	char	*pcTmp;
+	long	lWidth, lHeight;
 	size_t	tRealSize, tSize;
-	int	iCount;
 
 	DBG_MSG("bAddDummyImage");
 
@@ -407,29 +487,29 @@ bAddDummyImage(diagram_type *pDiag, const imagedata_type *pImg)
 	fail(pImg == NULL);
 	fail(pDiag->lXleft < 0);
 
-	if (pImg->iVerticalSize <= 0 || pImg->iHorizontalSize <= 0) {
+	if (pImg->iVerSizeScaled <= 0 || pImg->iHorSizeScaled <= 0) {
 		return FALSE;
 	}
 
 	DBG_DEC_C(pDiag->lXleft != 0, pDiag->lXleft);
-	pDiag->lYtop -= lPoints2DrawUnits(pImg->iVerticalSize);
+
+	lWidth = lPoints2DrawUnits(pImg->iHorSizeScaled);
+	lHeight = lPoints2DrawUnits(pImg->iVerSizeScaled);
+
+	pDiag->lYtop -= lHeight;
 
 	tRealSize = sizeof(draw_pathstrhdr) + 14 * sizeof(int);
-	tSize = MakeFour(tRealSize);
+	tSize = ROUND4(tRealSize);
 	vExtendDiagramSize(pDiag, tSize);
 	tNew.path = xmalloc(tSize);
 	tNew.path->tag = draw_OBJPATH;
 	tNew.path->size = tSize;
 	tNew.path->bbox.x0 = (int)pDiag->lXleft;
 	tNew.path->bbox.y0 = (int)pDiag->lYtop;
-	tNew.path->bbox.x1 =
-		(int)(pDiag->lXleft +
-		lPoints2DrawUnits(pImg->iHorizontalSize));
-	tNew.path->bbox.y1 =
-		(int)(pDiag->lYtop +
-		lPoints2DrawUnits(pImg->iVerticalSize));
+	tNew.path->bbox.x1 = (int)(pDiag->lXleft + lWidth);
+	tNew.path->bbox.y1 = (int)(pDiag->lYtop + lHeight);
 	tNew.path->fillcolour = -1;
-	tNew.path->pathcolour = 0x4d4d4d00;	/* Gray 70 % */
+	tNew.path->pathcolour = 0x4d4d4d00;	/* Gray 70 percent */
 	tNew.path->pathwidth = (int)lMilliPoints2DrawUnits(500);
 	tNew.path->pathstyle.joincapwind = 0;
 	tNew.path->pathstyle.reserved8 = 0;
@@ -450,11 +530,7 @@ bAddDummyImage(diagram_type *pDiag, const imagedata_type *pImg)
 	*piTmp++ = tNew.path->bbox.y0;
 	*piTmp++ = draw_PathCLOSE;
 	*piTmp++ = draw_PathTERM;
-	for (iCount = (int)tRealSize, pcTmp = (char *)tNew.path + tRealSize;
-	     iCount < (int)tSize;
-	     iCount++, pcTmp++) {
-		*pcTmp = '\0';
-	}
+	memset((char *)tNew.path + tRealSize, 0, tSize - tRealSize);
 	if (!draw_createObject(&pDiag->tInfo, tNew, draw_LastObject,
 						TRUE, &tHandle, &tError)) {
 		DBG_MSG("draw_createObject() failed");
@@ -469,51 +545,170 @@ bAddDummyImage(diagram_type *pDiag, const imagedata_type *pImg)
  * vMove2NextLine - move to the next line
  */
 void
-vMove2NextLine(diagram_type *pDiag, draw_fontref tFontRef, int iFontsize)
+vMove2NextLine(diagram_type *pDiag, draw_fontref tFontRef, USHORT usFontSize)
 {
 	long	l20;
 
 	fail(pDiag == NULL);
-	fail(iFontsize < MIN_FONT_SIZE || iFontsize > MAX_FONT_SIZE);
+	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
 
 	if (tFontRef == 0) {
 		l20 = draw_screenToDraw(32 + 3);
 	} else {
-		l20 = lWord2DrawUnits20(iFontsize);
+		l20 = lWord2DrawUnits20(usFontSize);
 	}
 	pDiag->lYtop -= l20;
 } /* end of vMove2NextLine */
 
 /*
- * Create an end of paragraph by moving the y-high mark 1/3 line down
+ * Create an start of paragraph (Phase 1)
  */
 void
-vEndOfParagraph2Diagram(diagram_type *pDiag,
-			draw_fontref tFontRef, int iFontsize)
+vStartOfParagraph1(diagram_type *pDiag, long lBeforeIndentation)
 {
-	long	l20;
-
 	fail(pDiag == NULL);
-	fail(iFontsize < MIN_FONT_SIZE || iFontsize > MAX_FONT_SIZE);
+	fail(lBeforeIndentation < 0);
 
-	if (tFontRef == 0) {
-		l20 = draw_screenToDraw(32 + 3);
-	} else {
-		l20 = lWord2DrawUnits20(iFontsize);
-	}
-	pDiag->lYtop -= l20 / 3;	/* Line spacing */
 	pDiag->lXleft = 0;
-} /* end of vEndOfParagraph2Diagram */
+	pDiag->lYtop -= lMilliPoints2DrawUnits(lBeforeIndentation);
+} /* end of vStartOfParagraph1 */
+
+/*
+ * Create an start of paragraph (Phase 2)
+ */
+void
+vStartOfParagraph2(diagram_type *pDiag)
+{
+	/* DUMMY */
+} /* end of vStartOfParagraph2 */
+
+/*
+ * Create an end of paragraph
+ */
+void
+vEndOfParagraph(diagram_type *pDiag,
+	draw_fontref tFontRef, USHORT usFontSize, long lAfterIndentation)
+{
+	fail(pDiag == NULL);
+	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
+	fail(lAfterIndentation < 0);
+
+	pDiag->lXleft = 0;
+	pDiag->lYtop -= lMilliPoints2DrawUnits(lAfterIndentation);
+} /* end of vEndOfParagraph */
 
 /*
  * Create an end of page
  */
 void
-vEndOfPage2Diagram(diagram_type *pDiag,
-			draw_fontref tFontRef, int iFontsize)
+vEndOfPage(diagram_type *pDiag, long lAfterIndentation)
 {
-	vEndOfParagraph2Diagram(pDiag, tFontRef, iFontsize);
-} /* end of vEndOfPage2Diagram */
+	fail(pDiag == NULL);
+	fail(lAfterIndentation < 0);
+
+	pDiag->lXleft = 0;
+	pDiag->lYtop -= lMilliPoints2DrawUnits(lAfterIndentation);
+} /* end of vEndOfPage */
+
+/*
+ * vSetHeaders - set the headers
+ */
+void
+vSetHeaders(diagram_type *pDiag, USHORT usIstd)
+{
+	/* DUMMY */
+} /* end of vSetHeaders */
+
+/*
+ * Create a start of list
+ */
+void
+vStartOfList(diagram_type *pDiag, UCHAR ucNFC, BOOL bIsEndOfTable)
+{
+	/* DUMMY */
+} /* end of vStartOfList */
+
+/*
+ * Create an end of list
+ */
+void
+vEndOfList(diagram_type *pDiag)
+{
+	/* DUMMY */
+} /* end of vEndOfList */
+
+/*
+ * Create a start of a list item
+ */
+void
+vStartOfListItem(diagram_type *pDiag, BOOL bNoMarks)
+{
+	/* DUMMY */
+} /* end of vStartOfListItem */
+
+/*
+ * Create an end of a table
+ */
+void
+vEndOfTable(diagram_type *pDiag)
+{
+	/* DUMMY */
+} /* end of vEndTable */
+
+/*
+ * Add a table row
+ *
+ * Returns TRUE when conversion type is XML
+ */
+BOOL
+bAddTableRow(diagram_type *pDiag, char **aszColTxt,
+	int iNbrOfColumns, const short *asColumnWidth, UCHAR ucBorderInfo)
+{
+	/* DUMMY */
+	return FALSE;
+} /* end of bAddTableRow */
+
+/*
+ * vForceRedraw - force a redraw of the main window
+ */
+static void
+vForceRedraw(diagram_type *pDiag)
+{
+	wimp_wstate	tWindowState;
+	wimp_redrawstr	tRedraw;
+
+	DBG_MSG("vForceRedraw");
+
+	fail(pDiag == NULL);
+
+	DBG_DEC(pDiag->iScaleFactorCurr);
+
+	/* Read the size of the current diagram */
+	draw_queryBox(&pDiag->tInfo, (draw_box *)&tRedraw.box, TRUE);
+	tRedraw.w = pDiag->tMainWindow;
+	/* Adjust the size of the work area */
+	tRedraw.box.x0 = tRedraw.box.x0 * pDiag->iScaleFactorCurr / 100 - 1;
+	tRedraw.box.y0 = tRedraw.box.y0 * pDiag->iScaleFactorCurr / 100 - 1;
+	tRedraw.box.x1 = tRedraw.box.x1 * pDiag->iScaleFactorCurr / 100 + 1;
+	tRedraw.box.y1 = tRedraw.box.y1 * pDiag->iScaleFactorCurr / 100 + 1;
+	/* Work area extension */
+	tRedraw.box.x0 -= WORKAREA_EXTENSION;
+	tRedraw.box.y0 -= WORKAREA_EXTENSION;
+	tRedraw.box.x1 += WORKAREA_EXTENSION;
+	tRedraw.box.y1 += WORKAREA_EXTENSION;
+	wimpt_noerr(wimp_set_extent(&tRedraw));
+	/* Widen the box slightly to be sure all the edges are drawn */
+	tRedraw.box.x0 -= 5;
+	tRedraw.box.y0 -= 5;
+	tRedraw.box.x1 += 5;
+	tRedraw.box.y1 += 5;
+	/* Force the redraw */
+	wimpt_noerr(wimp_force_redraw(&tRedraw));
+	/* Reopen the window to show the correct size */
+	wimpt_noerr(wimp_get_wind_state(pDiag->tMainWindow, &tWindowState));
+	tWindowState.o.behind = -1;
+	wimpt_noerr(wimp_open_wind(&tWindowState.o));
+} /* end of vForceRedraw */
 
 /*
  * bVerifyDiagram - Verify the diagram generated from the Word file
@@ -525,8 +720,9 @@ bVerifyDiagram(diagram_type *pDiag)
 {
 	draw_error	tError;
 
-	fail(pDiag == NULL);
 	DBG_MSG("bVerifyDiagram");
+
+	fail(pDiag == NULL);
 
 	if (draw_verify_diag(&pDiag->tInfo, &tError)) {
 		return TRUE;
@@ -536,15 +732,18 @@ bVerifyDiagram(diagram_type *pDiag)
 	return FALSE;
 } /* end of bVerifyDiagram */
 
+/*
+ * vShowDiagram - put the diagram on the screen
+ */
 void
 vShowDiagram(diagram_type *pDiag)
 {
 	wimp_wstate	tWindowState;
 	wimp_redrawstr	tRedraw;
 
-	fail(pDiag == NULL);
-
 	DBG_MSG("vShowDiagram");
+
+	fail(pDiag == NULL);
 
 	wimpt_noerr(wimp_get_wind_state(pDiag->tMainWindow, &tWindowState));
 	tWindowState.o.behind = -1;
@@ -552,12 +751,13 @@ vShowDiagram(diagram_type *pDiag)
 
 	draw_queryBox(&pDiag->tInfo, (draw_box *)&tRedraw.box, TRUE);
 	tRedraw.w = pDiag->tMainWindow;
-	/* Work area extention */
-	tRedraw.box.x0 -= WORKAREA_EXTENTION;
-	tRedraw.box.y0 -= WORKAREA_EXTENTION;
-	tRedraw.box.x1 += WORKAREA_EXTENTION;
-	tRedraw.box.y1 += WORKAREA_EXTENTION;
+	/* Work area extension */
+	tRedraw.box.x0 -= WORKAREA_EXTENSION;
+	tRedraw.box.y0 -= WORKAREA_EXTENSION;
+	tRedraw.box.x1 += WORKAREA_EXTENSION;
+	tRedraw.box.y1 += WORKAREA_EXTENSION;
 	wimpt_noerr(wimp_set_extent(&tRedraw));
+	vForceRedraw(pDiag);
 } /* end of vShowDiagram */
 
 /*
@@ -571,8 +771,8 @@ vMainButtonClick(wimp_mousestr *m)
 
 	fail(m == NULL);
 
-	DBG_HEX(m->bbits);
-	DBG_DEC(m->i);
+	NO_DBG_HEX(m->bbits);
+	NO_DBG_DEC(m->i);
 
 	if (m->w >= 0 &&
 	    m->i == -1 &&
@@ -584,7 +784,7 @@ vMainButtonClick(wimp_mousestr *m)
 		c.i = -1;
 		c.x = m->x - ws.o.box.x0;
 		c.y = m->y - ws.o.box.y1;
-		c.height = BIT(25);
+		c.height = (int)BIT(25);
 		c.index = 0;
 		wimpt_noerr(wimp_set_caret_pos(&c));
 	}
@@ -631,6 +831,7 @@ vRedrawMainWindow(wimp_w tWindow, diagram_type *pDiag)
 	fail(pDiag->tMainWindow != tWindow);
 	fail(pDiag->iScaleFactorCurr < MIN_SCALE_FACTOR);
 	fail(pDiag->iScaleFactorCurr > MAX_SCALE_FACTOR);
+	fail(bDrawRenderDiag == NULL);
 
 	dScaleFactor = (double)pDiag->iScaleFactorCurr / 100.0;
 	pInfo = &pDiag->tInfo;
@@ -640,13 +841,11 @@ vRedrawMainWindow(wimp_w tWindow, diagram_type *pDiag)
 
 	while (bMore) {
 		if (pInfo->data != NULL) {
-			if (!draw_render_diag(pInfo,
+			if (!bDrawRenderDiag(pInfo,
 					(draw_redrawstr *)&r,
 					dScaleFactor,
 					&tError)) {
-				DBG_MSG("draw_render_diag() failed");
-				DBG_DEC(r.box.x0 - r.scx);
-				DBG_DEC(r.box.y1 - r.scy);
+				DBG_MSG("bDrawRenderDiag() failed");
 				vPrintDrawError(&tError);
 			}
 		}
@@ -697,6 +896,8 @@ void
 vScaleOpenAction(diagram_type *pDiag)
 {
 	wimp_wstate	tWindowState;
+	wimp_mousestr	tMouseInfo;
+	int		iMoveX, iMoveY;
 
 	fail(pDiag == NULL);
 
@@ -708,15 +909,25 @@ vScaleOpenAction(diagram_type *pDiag)
 
 	DBG_MSG("vScaleOpenAction");
 
+	/* Allow the window to move in relation to the mouse position */
+	wimpt_noerr(wimp_get_point_info(&tMouseInfo));
+	iMoveX = tMouseInfo.x - tWindowState.o.box.x0 + 24;
+	iMoveY = tMouseInfo.y - tWindowState.o.box.y1 + 20;
+
 	pDiag->iScaleFactorTemp = pDiag->iScaleFactorCurr;
 	vUpdateWriteableNumber(pDiag->tScaleWindow,
 			SCALE_SCALE_WRITEABLE, pDiag->iScaleFactorTemp);
+
+	tWindowState.o.box.x0 += iMoveX;
+	tWindowState.o.box.x1 += iMoveX;
+	tWindowState.o.box.y0 += iMoveY;
+	tWindowState.o.box.y1 += iMoveY;
 	tWindowState.o.behind = -1;
 	wimpt_noerr(wimp_open_wind(&tWindowState.o));
 } /* end of vScaleOpenAction */
 
 /*
- * vSetTitle - set the titel of a window
+ * vSetTitle - set the title of a window
  */
 void
 vSetTitle(diagram_type *pDiag)
@@ -736,48 +947,6 @@ vSetTitle(diagram_type *pDiag)
 
 	win_settitle(pDiag->tMainWindow, szTitle);
 } /* end of vSetTitle */
-
-/*
- * vForceRedraw - force a redraw of the main window
- */
-static void
-vForceRedraw(diagram_type *pDiag)
-{
-	wimp_wstate	tWindowState;
-	wimp_redrawstr	tRedraw;
-
-	DBG_MSG("vForceRedraw");
-
-	fail(pDiag == NULL);
-
-	DBG_DEC(pDiag->iScaleFactorCurr);
-
-	/* Read the size of the current diagram */
-	draw_queryBox(&pDiag->tInfo, (draw_box *)&tRedraw.box, TRUE);
-	tRedraw.w = pDiag->tMainWindow;
-	/* Adjust the size of the work area */
-	tRedraw.box.x0 = tRedraw.box.x0 * pDiag->iScaleFactorCurr / 100 - 1;
-	tRedraw.box.y0 = tRedraw.box.y0 * pDiag->iScaleFactorCurr / 100 - 1;
-	tRedraw.box.x1 = tRedraw.box.x1 * pDiag->iScaleFactorCurr / 100 + 1;
-	tRedraw.box.y1 = tRedraw.box.y1 * pDiag->iScaleFactorCurr / 100 + 1;
-	/* Work area extention */
-	tRedraw.box.x0 -= WORKAREA_EXTENTION;
-	tRedraw.box.y0 -= WORKAREA_EXTENTION;
-	tRedraw.box.x1 += WORKAREA_EXTENTION;
-	tRedraw.box.y1 += WORKAREA_EXTENTION;
-	wimpt_noerr(wimp_set_extent(&tRedraw));
-	/* Widen the box slightly to be sure all the edges are drawn */
-	tRedraw.box.x0 -= 5;
-	tRedraw.box.y0 -= 5;
-	tRedraw.box.x1 += 5;
-	tRedraw.box.y1 += 5;
-	/* Force the redraw */
-	wimpt_noerr(wimp_force_redraw(&tRedraw));
-	/* Reopen the window to show the correct size */
-	wimpt_noerr(wimp_get_wind_state(pDiag->tMainWindow, &tWindowState));
-	tWindowState.o.behind = -1;
-	wimpt_noerr(wimp_open_wind(&tWindowState.o));
-} /* end of vForceRedraw */
 
 /*
  * vScaleButtonClick - handle a mouse button click in the Scale view window
@@ -833,6 +1002,9 @@ vScaleButtonClick(wimp_mousestr *m, diagram_type *pDiag)
 	}
 } /* end of vScaleButtonClick */
 
+/*
+ *
+ */
 static void
 vScaleKeyPressed(int chcode, wimp_caretstr *c, diagram_type *pDiag)
 {
@@ -887,7 +1059,11 @@ vScaleEventHandler(wimp_eventstr *pEvent, void *pvHandle)
 {
 	diagram_type	*pDiag;
 
+	DBG_MSG("vScaleEventHandler");
+
 	fail(pEvent == NULL);
+
+	DBG_DEC(pEvent->e);
 
 	pDiag = (diagram_type *)pvHandle;
 

@@ -1,6 +1,6 @@
 /*
  * findtext.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2001 A.J. van Os; Released under GPL
  *
  * Description:
  * Find the blocks that contain the text of MS Word files
@@ -17,258 +17,283 @@
  * Returns TRUE when successful, FALSE if not
  */
 BOOL
-bAddTextBlocks(long lFirstOffset, size_t tTotalLength, BOOL bUsesUnicode,
-	int iStartBlock, const int *aiBBD, size_t tBBDLen)
+bAddTextBlocks(ULONG ulCharPosFirst, ULONG ulTotalLength,
+	BOOL bUsesUnicode, USHORT usPropMod,
+	ULONG ulStartBlock, const ULONG *aulBBD, size_t tBBDLen)
 {
 	text_block_type	tTextBlock;
-	long	lTextOffset;
-	size_t	tToGo, tOffset;
-	int	iIndex;
+	ULONG	ulCharPos, ulOffset, ulIndex;
+	long	lToGo;
 
-	fail(lFirstOffset < 0);
-	fail(iStartBlock < 0);
-	fail(aiBBD == NULL);
+	fail(ulTotalLength > (ULONG)LONG_MAX / 2);
+	fail(ulStartBlock > MAX_BLOCKNUMBER && ulStartBlock != END_OF_CHAIN);
+	fail(aulBBD == NULL);
 
-	NO_DBG_HEX(lFirstOffset);
-	NO_DBG_DEC(tTotalLength);
+	NO_DBG_HEX(ulCharPosFirst);
+	NO_DBG_DEC(ulTotalLength);
 
 	if (bUsesUnicode) {
 		/* One character equals two bytes */
 		NO_DBG_MSG("Uses Unicode");
-		tToGo = tTotalLength * 2;
+		lToGo = (long)ulTotalLength * 2;
 	} else {
 		/* One character equals one byte */
 		NO_DBG_MSG("Uses ASCII");
-		tToGo = tTotalLength;
+		lToGo = (long)ulTotalLength;
 	}
 
-	lTextOffset = lFirstOffset;
-	tOffset = (size_t)lFirstOffset;
-	for (iIndex = iStartBlock;
-	     iIndex != END_OF_CHAIN && tToGo != 0;
-	     iIndex = aiBBD[iIndex]) {
-		if (iIndex < 0 || iIndex >= (int)tBBDLen) {
-			werr(1, "The Big Block Depot is corrupt");
+	ulCharPos = ulCharPosFirst;
+	ulOffset = ulCharPosFirst;
+	for (ulIndex = ulStartBlock;
+	     ulIndex != END_OF_CHAIN && lToGo > 0;
+	     ulIndex = aulBBD[ulIndex]) {
+		if (ulIndex >= (ULONG)tBBDLen) {
+			DBG_DEC(ulIndex);
+			DBG_DEC(tBBDLen);
+			werr(1, "The Big Block Depot is damaged");
 		}
-		if (tOffset >= BIG_BLOCK_SIZE) {
-			tOffset -= BIG_BLOCK_SIZE;
+		if (ulOffset >= BIG_BLOCK_SIZE) {
+			ulOffset -= BIG_BLOCK_SIZE;
 			continue;
 		}
-		tTextBlock.lFileOffset =
-			((long)iIndex + 1) * BIG_BLOCK_SIZE + (long)tOffset;
-		tTextBlock.lTextOffset = lTextOffset;
-		tTextBlock.tLength = min(BIG_BLOCK_SIZE - tOffset, tToGo);
+		tTextBlock.ulFileOffset =
+			(ulIndex + 1) * BIG_BLOCK_SIZE + ulOffset;
+		tTextBlock.ulCharPos = ulCharPos;
+		tTextBlock.ulLength = min(BIG_BLOCK_SIZE - ulOffset,
+						(ULONG)lToGo);
 		tTextBlock.bUsesUnicode = bUsesUnicode;
-		tOffset = 0;
+		tTextBlock.usPropMod = usPropMod;
+		ulOffset = 0;
 		if (!bAdd2TextBlockList(&tTextBlock)) {
-			DBG_HEX(tTextBlock.lFileOffset);
-			DBG_HEX(tTextBlock.lTextOffset);
-			DBG_DEC(tTextBlock.tLength);
+			DBG_HEX(tTextBlock.ulFileOffset);
+			DBG_HEX(tTextBlock.ulCharPos);
+			DBG_DEC(tTextBlock.ulLength);
 			DBG_DEC(tTextBlock.bUsesUnicode);
+			DBG_DEC(tTextBlock.usPropMod);
 			return FALSE;
 		}
-		lTextOffset += (long)tTextBlock.tLength;
-		tToGo -= tTextBlock.tLength;
+		ulCharPos += tTextBlock.ulLength;
+		lToGo -= (long)tTextBlock.ulLength;
 	}
-	return tToGo == 0;
+	DBG_DEC_C(lToGo != 0, lToGo);
+	return lToGo == 0;
 } /* end of bAddTextBlocks */
 
 /*
  * bGet6DocumentText - make a list of the text blocks of Word 6/7 files
  *
  * Code for "fast saved" files.
+ *
+ * Returns TRUE when successful, FALSE if not
  */
-text_info_enum
-eGet6DocumentText(FILE *pFile, BOOL bUsesUnicode, int iStartBlock,
-	const int *aiBBD, size_t tBBDLen, const unsigned char *aucHeader)
+BOOL
+bGet6DocumentText(FILE *pFile, BOOL bUsesUnicode, ULONG ulStartBlock,
+	const ULONG *aulBBD, size_t tBBDLen, const UCHAR *aucHeader)
 {
-	unsigned char	*aucBuffer;
-	long	lOffset;
-	size_t	tBeginTextInfo, tTextInfoLen, tTotLength;
-	int	iIndex;
-	int	iOff, iType, iLen, iPieces;
+	UCHAR	*aucBuffer;
+	ULONG	ulBeginTextInfo, ulTextOffset, ulTotLength;
+	size_t	tTextInfoLen;
+	int	iIndex, iType, iOff, iLen, iPieces;
+	USHORT	usPropMod;
 
-	DBG_MSG("eGet6DocumentText");
+	DBG_MSG("bGet6DocumentText");
 
 	fail(pFile == NULL);
-	fail(aiBBD == NULL);
+	fail(aulBBD == NULL);
 	fail(aucHeader == NULL);
 
-	tBeginTextInfo = (size_t)ulGetLong(0x160, aucHeader);
-	tTextInfoLen = (size_t)ulGetLong(0x164, aucHeader);
-	DBG_HEX(tBeginTextInfo);
+	ulBeginTextInfo = ulGetLong(0x160, aucHeader);	/* fcClx */
+	DBG_HEX(ulBeginTextInfo);
+	tTextInfoLen = (size_t)ulGetLong(0x164, aucHeader);	/* lcbClx */
 	DBG_DEC(tTextInfoLen);
 
 	aucBuffer = xmalloc(tTextInfoLen);
-	if (!bReadBuffer(pFile, iStartBlock,
-			aiBBD, tBBDLen, BIG_BLOCK_SIZE,
-			aucBuffer, tBeginTextInfo, tTextInfoLen)) {
+	if (!bReadBuffer(pFile, ulStartBlock,
+			aulBBD, tBBDLen, BIG_BLOCK_SIZE,
+			aucBuffer, ulBeginTextInfo, tTextInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
-		return text_failure;
+		return FALSE;
 	}
 	NO_DBG_PRINT_BLOCK(aucBuffer, tTextInfoLen);
 
 	iOff = 0;
-	while (iOff < (int)tTextInfoLen) {
+	while ((size_t)iOff < tTextInfoLen) {
 		iType = (int)ucGetByte(iOff, aucBuffer);
 		iOff++;
 		if (iType == 0) {
-			iOff++;
-			continue;
-		}
-		iLen = (int)usGetWord(iOff, aucBuffer);
-		iOff += 2;
-		if (iType == 1) {
-			iOff += iLen;
-			continue;
-		}
-		if (iType != 2) {
-			werr(0, "Unknown type of 'fastsaved' format");
-			aucBuffer = xfree(aucBuffer);
-			return text_failure;
-		}
-		/* Type 2 */
-		NO_DBG_DEC(iLen);
-		iOff += 2;
-		iPieces = (iLen - 4) / 12;
-		DBG_DEC(iPieces);
-		for (iIndex = 0; iIndex < iPieces; iIndex++) {
-			lOffset = (long)ulGetLong(
-				iOff + (iPieces + 1) * 4 + iIndex * 8 + 2,
-				aucBuffer);
-			tTotLength = (size_t)ulGetLong(
-						iOff + (iIndex + 1) * 4,
-						aucBuffer) -
-					(size_t)ulGetLong(
-						iOff + iIndex * 4,
-						aucBuffer);
-			if (!bAddTextBlocks(lOffset, tTotLength, bUsesUnicode,
-					iStartBlock,
-					aiBBD, tBBDLen)) {
-				aucBuffer = xfree(aucBuffer);
-				return text_failure;
-			}
-		}
-		break;
-	}
-	aucBuffer = xfree(aucBuffer);
-	return text_success;
-} /* end of eGet6DocumentText */
-
-/*
- * eGet8DocumentText - make a list of the text blocks of Word 8/97 files
- */
-text_info_enum
-eGet8DocumentText(FILE *pFile, const pps_info_type *pPPS,
-	const int *aiBBD, size_t tBBDLen, const int *aiSBD, size_t tSBDLen,
-	const unsigned char *aucHeader)
-{
-	const int	*aiBlockDepot;
-	unsigned char	*aucBuffer;
-	long	lOffset, lTableSize, lLen;
-	size_t	tBeginTextInfo, tTextInfoLen, tBlockDepotLen, tBlockSize;
-	size_t	tTotLength;
-	int	iTableStartBlock;
-	int	iIndex, iOff, iType, iLen, iPieces;
-	BOOL	bUsesUnicode;
-	unsigned short	usDocStatus;
-
-	DBG_MSG("eGet8DocumentText");
-
-	fail(pFile == NULL || pPPS == NULL);
-	fail(aiBBD == NULL || aiSBD == NULL);
-	fail(aucHeader == NULL);
-
-  	tBeginTextInfo = (size_t)ulGetLong(0x1a2, aucHeader);
-	tTextInfoLen = (size_t)ulGetLong(0x1a6, aucHeader);
-	DBG_HEX(tBeginTextInfo);
-	DBG_DEC(tTextInfoLen);
-
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		iTableStartBlock = pPPS->t1Table.iSb;
-		lTableSize = pPPS->t1Table.lSize;
-	} else {
-		iTableStartBlock = pPPS->t0Table.iSb;
-		lTableSize = pPPS->t0Table.lSize;
-	}
-	DBG_DEC(iTableStartBlock);
-	if (iTableStartBlock < 0) {
-		DBG_DEC(iTableStartBlock);
-		return text_failure;
-	}
-	DBG_HEX(lTableSize);
-	if (lTableSize < MIN_SIZE_FOR_BBD_USE) {
-	  	/* Use the Small Block Depot */
-		aiBlockDepot = aiSBD;
-		tBlockDepotLen = tSBDLen;
-		tBlockSize = SMALL_BLOCK_SIZE;
-	} else {
-	  	/* Use the Big Block Depot */
-		aiBlockDepot = aiBBD;
-		tBlockDepotLen = tBBDLen;
-		tBlockSize = BIG_BLOCK_SIZE;
-	}
-	aucBuffer = xmalloc(tTextInfoLen);
-	if (!bReadBuffer(pFile, iTableStartBlock,
-			aiBlockDepot, tBlockDepotLen, tBlockSize,
-			aucBuffer, tBeginTextInfo, tTextInfoLen)) {
-		aucBuffer = xfree(aucBuffer);
-		return text_no_information;
-	}
-	NO_DBG_PRINT_BLOCK(aucBuffer, tTextInfoLen);
-
-	iOff = 0;
-	while (iOff < (int)tTextInfoLen) {
-		iType = (int)ucGetByte(iOff, aucBuffer);
-		iOff++;
-		if (iType == 0) {
+			DBG_FIXME();
 			iOff++;
 			continue;
 		}
 		if (iType == 1) {
 			iLen = (int)usGetWord(iOff, aucBuffer);
+			vAdd2PropModList(aucBuffer + iOff);
 			iOff += iLen + 2;
 			continue;
 		}
 		if (iType != 2) {
 			werr(0, "Unknown type of 'fastsaved' format");
 			aucBuffer = xfree(aucBuffer);
-			return text_failure;
+			return FALSE;
 		}
 		/* Type 2 */
-		lLen = (long)ulGetLong(iOff, aucBuffer);
-		NO_DBG_DEC(lLen);
+		iLen = (int)usGetWord(iOff, aucBuffer);
+		NO_DBG_DEC(iLen);
 		iOff += 4;
-		iPieces = (int)((lLen - 4) / 12);
+		iPieces = (iLen - 4) / 12;
 		DBG_DEC(iPieces);
 		for (iIndex = 0; iIndex < iPieces; iIndex++) {
-			lOffset = (long)ulGetLong(
+			ulTextOffset = ulGetLong(
 				iOff + (iPieces + 1) * 4 + iIndex * 8 + 2,
 				aucBuffer);
-			if ((lOffset & BIT(30)) == 0) {
-				bUsesUnicode = TRUE;
-			} else {
-				bUsesUnicode = FALSE;
-				lOffset &= ~BIT(30);
-				lOffset /= 2;
-			}
-			tTotLength = (size_t)ulGetLong(
-						iOff + (iIndex + 1) * 4,
+			usPropMod = usGetWord(
+				iOff + (iPieces + 1) * 4 + iIndex * 8 + 6,
+				aucBuffer);
+			ulTotLength = ulGetLong(iOff + (iIndex + 1) * 4,
 						aucBuffer) -
-					(size_t)ulGetLong(
-						iOff + iIndex * 4,
+					ulGetLong(iOff + iIndex * 4,
 						aucBuffer);
-			if (!bAddTextBlocks(lOffset, tTotLength, bUsesUnicode,
-					pPPS->tWordDocument.iSb,
-					aiBBD, tBBDLen)) {
+			NO_DBG_HEX_C(usPropMod != 0, usPropMod);
+			if (!bAddTextBlocks(ulTextOffset, ulTotLength,
+					bUsesUnicode, usPropMod,
+					ulStartBlock,
+					aulBBD, tBBDLen)) {
 				aucBuffer = xfree(aucBuffer);
-				return text_failure;
+				return FALSE;
 			}
 		}
 		break;
 	}
 	aucBuffer = xfree(aucBuffer);
-	return text_success;
-} /* end of eGet8DocumentText */
+	return TRUE;
+} /* end of bGet6DocumentText */
+
+/*
+ * bGet8DocumentText - make a list of the text blocks of Word 8/97 files
+ *
+ * Returns TRUE when successful, FALSE if not
+ */
+BOOL
+bGet8DocumentText(FILE *pFile, const pps_info_type *pPPS,
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader)
+{
+	const ULONG	*aulBlockDepot;
+	UCHAR	*aucBuffer;
+	ULONG	ulTextOffset, ulBeginTextInfo;
+	ULONG	ulTotLength, ulLen;
+	ULONG	ulTableStartBlock, ulTableSize;
+	long	lIndex, lPieces, lOff;
+	size_t	tTextInfoLen, tBlockDepotLen, tBlockSize;
+	int	iType, iLen;
+	BOOL	bUsesUnicode;
+	USHORT	usDocStatus, usPropMod;
+
+	DBG_MSG("bGet8DocumentText");
+
+	fail(pFile == NULL || pPPS == NULL);
+	fail(aulBBD == NULL || aulSBD == NULL);
+	fail(aucHeader == NULL);
+
+  	ulBeginTextInfo = ulGetLong(0x1a2, aucHeader);	/* fcClx */
+	DBG_HEX(ulBeginTextInfo);
+	tTextInfoLen = (size_t)ulGetLong(0x1a6, aucHeader);	/* lcbClx */
+	DBG_DEC(tTextInfoLen);
+
+	/* Use 0Table or 1Table? */
+	usDocStatus = usGetWord(0x0a, aucHeader);
+	if (usDocStatus & BIT(9)) {
+		ulTableStartBlock = pPPS->t1Table.ulSB;
+		ulTableSize = pPPS->t1Table.ulSize;
+	} else {
+		ulTableStartBlock = pPPS->t0Table.ulSB;
+		ulTableSize = pPPS->t0Table.ulSize;
+	}
+	DBG_DEC(ulTableStartBlock);
+	if (ulTableStartBlock == 0) {
+		DBG_DEC(ulTableStartBlock);
+		return FALSE;
+	}
+	DBG_HEX(ulTableSize);
+	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+	  	/* Use the Small Block Depot */
+		aulBlockDepot = aulSBD;
+		tBlockDepotLen = tSBDLen;
+		tBlockSize = SMALL_BLOCK_SIZE;
+	} else {
+	  	/* Use the Big Block Depot */
+		aulBlockDepot = aulBBD;
+		tBlockDepotLen = tBBDLen;
+		tBlockSize = BIG_BLOCK_SIZE;
+	}
+	aucBuffer = xmalloc(tTextInfoLen);
+	if (!bReadBuffer(pFile, ulTableStartBlock,
+			aulBlockDepot, tBlockDepotLen, tBlockSize,
+			aucBuffer, ulBeginTextInfo, tTextInfoLen)) {
+		aucBuffer = xfree(aucBuffer);
+		return FALSE;
+	}
+	NO_DBG_PRINT_BLOCK(aucBuffer, tTextInfoLen);
+
+	lOff = 0;
+	while (lOff < (long)tTextInfoLen) {
+		iType = (int)ucGetByte(lOff, aucBuffer);
+		lOff++;
+		if (iType == 0) {
+			DBG_FIXME();
+			lOff++;
+			continue;
+		}
+		if (iType == 1) {
+			iLen = (int)usGetWord(lOff, aucBuffer);
+			vAdd2PropModList(aucBuffer + lOff);
+			lOff += (long)iLen + 2;
+			continue;
+		}
+		if (iType != 2) {
+			werr(0, "Unknown type of 'fastsaved' format");
+			aucBuffer = xfree(aucBuffer);
+			return FALSE;
+		}
+		/* Type 2 */
+		ulLen = ulGetLong(lOff, aucBuffer);
+		if (ulLen < 4) {
+			DBG_DEC(ulLen);
+			return FALSE;
+		}
+		lOff += 4;
+		lPieces = (long)((ulLen - 4) / 12);
+		DBG_DEC(lPieces);
+		for (lIndex = 0; lIndex < lPieces; lIndex++) {
+			ulTextOffset = ulGetLong(
+				lOff + (lPieces + 1) * 4 + lIndex * 8 + 2,
+				aucBuffer);
+			usPropMod = usGetWord(
+				lOff + (lPieces + 1) * 4 + lIndex * 8 + 6,
+				aucBuffer);
+			ulTotLength = ulGetLong(lOff + (lIndex + 1) * 4,
+						aucBuffer) -
+					ulGetLong(lOff + lIndex * 4,
+						aucBuffer);
+			if ((ulTextOffset & BIT(30)) == 0) {
+				bUsesUnicode = TRUE;
+			} else {
+				bUsesUnicode = FALSE;
+				ulTextOffset &= ~BIT(30);
+				ulTextOffset /= 2;
+			}
+			NO_DBG_HEX_C(usPropMod != 0, usPropMod);
+			if (!bAddTextBlocks(ulTextOffset, ulTotLength,
+					bUsesUnicode, usPropMod,
+					pPPS->tWordDocument.ulSB,
+					aulBBD, tBBDLen)) {
+				aucBuffer = xfree(aucBuffer);
+				return FALSE;
+			}
+		}
+		break;
+	}
+	aucBuffer = xfree(aucBuffer);
+	return TRUE;
+} /* end of bGet8DocumentText */

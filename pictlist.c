@@ -1,6 +1,6 @@
 /*
  * pictlist.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000,2001 A.J. van Os; Released under GPL
  *
  * Description:
  * Build, read and destroy a list of Word picture information
@@ -16,14 +16,14 @@ static picture_desc_type	*pPictureLast = NULL;
 
 
 /*
- * vDestroyPicInfoList - destroy the Picture Information List
+ * vDestroyPictInfoList - destroy the Picture Information List
  */
 void
-vDestroyPicInfoList(void)
+vDestroyPictInfoList(void)
 {
 	picture_desc_type	*pCurr, *pNext;
 
-	DBG_MSG("vDestroyPicInfoList");
+	DBG_MSG("vDestroyPictInfoList");
 
 	/* Free the Picture Information List */
 	pCurr = pAnchor;
@@ -35,30 +35,28 @@ vDestroyPicInfoList(void)
 	pAnchor = NULL;
 	/* Reset all control variables */
 	pPictureLast = NULL;
-} /* end of vDestroyPicInfoList */
+} /* end of vDestroyPictInfoList */
 
 /*
- * vAdd2PicInfoList - Add an element to the Picture Information List
+ * vAdd2PictInfoList - Add an element to the Picture Information List
  */
 void
-vAdd2PicInfoList(const picture_block_type *pPictureBlock)
+vAdd2PictInfoList(const picture_block_type *pPictureBlock)
 {
 	picture_desc_type	*pListMember;
 
 	fail(pPictureBlock == NULL);
-	fail(pPictureBlock->lFileOffset < -1);
-	fail(pPictureBlock->lFileOffsetPicture < -1);
 
-	NO_DBG_MSG("bAdd2PicInfoList");
+	NO_DBG_MSG("bAdd2PictInfoList");
 
-	if (pPictureBlock->lFileOffset < 0) {
+	if (pPictureBlock->ulFileOffset == FC_INVALID) {
 		/*
 		 * This offset is really past the end of the file,
 		 * so don't waste any memory by storing it.
 		 */
 		return;
 	}
-	if (pPictureBlock->lFileOffsetPicture < 0) {
+	if (pPictureBlock->ulFileOffsetPicture == FC_INVALID) {
 		/*
 		 * The place where this picture is supposed to be stored
 		 * doesn't exist.
@@ -66,9 +64,9 @@ vAdd2PicInfoList(const picture_block_type *pPictureBlock)
 		return;
 	}
 
-	NO_DBG_HEX(pPictureBlock->lFileOffset);
-	NO_DBG_HEX(pPictureBlock->lFileOffsetPicture);
-	NO_DBG_HEX(pPictureBlock->lPictureOffset);
+	NO_DBG_HEX(pPictureBlock->ulFileOffset);
+	NO_DBG_HEX(pPictureBlock->ulFileOffsetPicture);
+	NO_DBG_HEX(pPictureBlock->ulPictureOffset);
 
 	/* Create list member */
 	pListMember = xmalloc(sizeof(picture_desc_type));
@@ -83,20 +81,20 @@ vAdd2PicInfoList(const picture_block_type *pPictureBlock)
 		pPictureLast->pNext = pListMember;
 	}
 	pPictureLast = pListMember;
-} /* end of vAdd2PicInfoList */
+} /* end of vAdd2PictInfoList */
 
 /*
  * Get the info with the given file offset from the Picture Information List
  */
-long
-lGetPicInfoListItem(long lFileOffset)
+ULONG
+ulGetPictInfoListItem(ULONG ulFileOffset)
 {
 	picture_desc_type	*pCurr;
 
 	for (pCurr = pAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		if (pCurr->tInfo.lFileOffset == lFileOffset) {
-			return pCurr->tInfo.lFileOffsetPicture;
+		if (pCurr->tInfo.ulFileOffset == ulFileOffset) {
+			return pCurr->tInfo.ulFileOffsetPicture;
 		}
 	}
-	return -1;
-} /* end of lGetPicInfoListItem */
+	return FC_INVALID;
+} /* end of ulGetPictInfoListItem */

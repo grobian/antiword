@@ -1,6 +1,6 @@
 /*
  * chartrans.c
- * Copyright (C) 1999,2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1999-2003 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Translate Word characters to local representation
@@ -9,16 +9,57 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#if defined(__STDC_ISO_10646__)
+#include <wctype.h>
+#endif /* __STDC_ISO_10646__ */
 #include "antiword.h"
 
-static const unsigned short usCp1252[] = {
-	0x20ac,    '?', 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021,
-	0x02c6, 0x2030, 0x0160, 0x2039, 0x0152,    '?', 0x017D,    '?',
-	   '?', 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014,
-	0x02dc, 0x2122, 0x0161, 0x203a, 0x0153,    '?', 0x017e, 0x0178,
+static const USHORT usCp850[] = {
+	0x00c7, 0x00fc, 0x00e9, 0x00e2, 0x00e4, 0x00e0, 0x00e5, 0x00e7,
+	0x00ea, 0x00eb, 0x00e8, 0x00ef, 0x00ee, 0x00ec, 0x00c4, 0x00c5,
+	0x00c9, 0x00e6, 0x00c6, 0x00f4, 0x00f6, 0x00f2, 0x00fb, 0x00f9,
+	0x00ff, 0x00d6, 0x00dc, 0x00f8, 0x00a3, 0x00d8, 0x00d7, 0x0192,
+	0x00e1, 0x00ed, 0x00f3, 0x00fa, 0x00f1, 0x00d1, 0x00aa, 0x00ba,
+	0x00bf, 0x00ae, 0x00ac, 0x00bd, 0x00bc, 0x00a1, 0x00ab, 0x00bb,
+	0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x00c1, 0x00c2, 0x00c0,
+	0x00a9, 0x2563, 0x2551, 0x2557, 0x255d, 0x00a2, 0x00a5, 0x2510,
+	0x2514, 0x2534, 0x252c, 0x251c, 0x2500, 0x253c, 0x00e3, 0x00c3,
+	0x255a, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256c, 0x00a4,
+	0x00f0, 0x00d0, 0x00ca, 0x00cb, 0x00c8, 0x0131, 0x00cd, 0x00ce,
+	0x00cf, 0x2518, 0x250c, 0x2588, 0x2584, 0x00a6, 0x00cc, 0x2580,
+	0x00d3, 0x00df, 0x00d4, 0x00d2, 0x00f5, 0x00d5, 0x00b5, 0x00fe,
+	0x00de, 0x00da, 0x00db, 0x00d9, 0x00fd, 0x00dd, 0x00af, 0x00b4,
+	0x00ad, 0x00b1, 0x2017, 0x00be, 0x00b6, 0x00a7, 0x00f7, 0x00b8,
+	0x00b0, 0x00a8, 0x00b7, 0x00b9, 0x00b3, 0x00b2, 0x25a0, 0x00a0,
 };
 
-static const unsigned short usMacRoman[] = {
+static const USHORT usCp1250[] = {
+	0x20ac, 0x003f, 0x201a, 0x003f, 0x201e, 0x2026, 0x2020, 0x2021,
+	0x003f, 0x2030, 0x0160, 0x2039, 0x015a, 0x0164, 0x017d, 0x0179,
+	0x003f, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014,
+	0x003f, 0x2122, 0x0161, 0x203a, 0x015b, 0x0165, 0x017e, 0x017a,
+	0x00a0, 0x02c7, 0x02d8, 0x0141, 0x00a4, 0x0104, 0x00a6, 0x00a7,
+	0x00a8, 0x00a9, 0x015e, 0x00ab, 0x00ac, 0x00ad, 0x00ae, 0x017b,
+	0x00b0, 0x00b1, 0x02db, 0x0142, 0x00b4, 0x00b5, 0x00b6, 0x00b7,
+	0x00b8, 0x0105, 0x015f, 0x00bb, 0x013d, 0x02dd, 0x013e, 0x017c,
+	0x0154, 0x00c1, 0x00c2, 0x0102, 0x00c4, 0x0139, 0x0106, 0x00c7,
+	0x010c, 0x00c9, 0x0118, 0x00cb, 0x011a, 0x00cd, 0x00ce, 0x010e,
+	0x0110, 0x0143, 0x0147, 0x00d3, 0x00d4, 0x0150, 0x00d6, 0x00d7,
+	0x0158, 0x016e, 0x00da, 0x0170, 0x00dc, 0x00dd, 0x0162, 0x00df,
+	0x0155, 0x00e1, 0x00e2, 0x0103, 0x00e4, 0x013a, 0x0107, 0x00e7,
+	0x010d, 0x00e9, 0x0119, 0x00eb, 0x011b, 0x00ed, 0x00ee, 0x010f,
+	0x0111, 0x0144, 0x0148, 0x00f3, 0x00f4, 0x0151, 0x00f6, 0x00f7,
+	0x0159, 0x016f, 0x00fa, 0x0171, 0x00fc, 0x00fd, 0x0163, 0x02d9,
+};
+
+static const USHORT usCp1252[] = {
+	0x20ac, 0x003f, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021,
+	0x02c6, 0x2030, 0x0160, 0x2039, 0x0152, 0x003f, 0x017d, 0x003f,
+	0x003f, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014,
+	0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x003f, 0x017e, 0x0178,
+};
+
+static const USHORT usMacRoman[] = {
 	0x00c4, 0x00c5, 0x00c7, 0x00c9, 0x00d1, 0x00d6, 0x00dc, 0x00e1,
 	0x00e0, 0x00e2, 0x00e4, 0x00e3, 0x00e5, 0x00e7, 0x00e9, 0x00e8,
 	0x00ea, 0x00eb, 0x00ed, 0x00ec, 0x00ee, 0x00ef, 0x00f1, 0x00f3,
@@ -33,13 +74,44 @@ static const unsigned short usMacRoman[] = {
 	0x00ff, 0x0178, 0x2044, 0x00a4, 0x2039, 0x203a, 0xfb01, 0xfb02,
 	0x2021, 0x00b7, 0x201a, 0x201e, 0x2030, 0x00c2, 0x00ca, 0x00c1,
 	0x00cb, 0x00c8, 0x00cd, 0x00ce, 0x00cf, 0x00cc, 0x00d3, 0x00d4,
-	   '?', 0x00d2, 0x00da, 0x00db, 0x00d9, 0x0131, 0x02c6, 0x02dc,
+	0x003f, 0x00d2, 0x00da, 0x00db, 0x00d9, 0x0131, 0x02c6, 0x02dc,
 	0x00af, 0x02d8, 0x02d9, 0x02da, 0x00b8, 0x02dd, 0x02db, 0x02c7,
 };
 
+static const USHORT usPrivateArea[] = {
+	0x0020, 0x0021, 0x2200, 0x0023, 0x2203, 0x0025, 0x0026, 0x220d,
+	0x0028, 0x0029, 0x2217, 0x002b, 0x002c, 0x2212, 0x002e, 0x002f,
+	0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037,
+	0x0038, 0x0039, 0x003a, 0x003b, 0x003c, 0x2019, 0x003e, 0x003f,
+	0x201d, 0x201c, 0x0392, 0x03a7, 0x0394, 0x0395, 0x03a6, 0x0393,
+	0x0397, 0x0399, 0x03d1, 0x039a, 0x039b, 0x039c, 0x039d, 0x039f,
+	0x03a0, 0x0398, 0x03a1, 0x03a3, 0x03a4, 0x03a5, 0x03c2, 0x03a9,
+	0x039e, 0x03a8, 0x0396, 0x005b, 0x2234, 0x005d, 0x22a5, 0x005f,
+	0x003f, 0x03b1, 0x03b2, 0x03c7, 0x03b4, 0x03b5, 0x03c6, 0x03b3,
+	0x03b7, 0x03b9, 0x03d5, 0x03ba, 0x03bb, 0x03bc, 0x03bd, 0x03bf,
+	0x03c0, 0x03b8, 0x03c1, 0x03c3, 0x03c4, 0x03c5, 0x03d6, 0x03c9,
+	0x03be, 0x03c8, 0x03b6, 0x007b, 0x007c, 0x007d, 0x223c, 0x003f,
+	0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f,
+	0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f,
+	0x003f, 0x003f, 0x003f, 0x2022, 0x003f, 0x003f, 0x003f, 0x003f,
+	0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f, 0x003f,
+	0x20ac, 0x03d2, 0x2032, 0x2264, 0x2044, 0x221e, 0x0192, 0x2663,
+	0x2666, 0x2665, 0x2660, 0x2194, 0x2190, 0x2191, 0x2192, 0x2193,
+	0x00b0, 0x00b1, 0x2033, 0x2265, 0x00d7, 0x221d, 0x2202, 0x2022,
+	0x00f7, 0x2260, 0x2261, 0x2248, 0x2026, 0x007c, 0x23af, 0x21b5,
+	0x2135, 0x2111, 0x211c, 0x2118, 0x2297, 0x2295, 0x2205, 0x2229,
+	0x222a, 0x2283, 0x2287, 0x2284, 0x2282, 0x2286, 0x2208, 0x2209,
+	0x2220, 0x2207, 0x00ae, 0x00a9, 0x2122, 0x220f, 0x221a, 0x22c5,
+	0x00ac, 0x2227, 0x2228, 0x21d4, 0x21d0, 0x21d1, 0x21d2, 0x21d3,
+	0x22c4, 0x3008, 0x00ae, 0x00a9, 0x2122, 0x2211, 0x239b, 0x239c,
+	0x239d, 0x23a1, 0x23a2, 0x23a3, 0x23a7, 0x23a8, 0x23a9, 0x23aa,
+	0x003f, 0x3009, 0x222b, 0x2320, 0x23ae, 0x2321, 0x239e, 0x239f,
+	0x23a0, 0x23a4, 0x23a5, 0x23a6, 0x23ab, 0x23ac, 0x23ad, 0x003f,
+};
+
 typedef struct char_table_tag {
-	int		iLocal;
-	unsigned short	usUnicode;
+	USHORT	usLocal;
+	USHORT	usUnicode;
 } char_table_type;
 
 static char_table_type atCharTable[128];
@@ -53,12 +125,12 @@ static char_table_type atCharTable[128];
  * returns -1 if rec1 < rec2, 0 if rec1 == rec2, 1 if rec1 > rec2
  */
 static int
-iCompare(const void *vpRecord1, const void *vpRecord2)
+iCompare(const void *pvRecord1, const void *pvRecord2)
 {
-	unsigned short	usUnicode1, usUnicode2;
+	USHORT	usUnicode1, usUnicode2;
 
-	usUnicode1 = ((char_table_type *)vpRecord1)->usUnicode;
-	usUnicode2 = ((char_table_type *)vpRecord2)->usUnicode;
+	usUnicode1 = ((char_table_type *)pvRecord1)->usUnicode;
+	usUnicode2 = ((char_table_type *)pvRecord2)->usUnicode;
 
 	if (usUnicode1 < usUnicode2) {
 		return -1;
@@ -68,6 +140,42 @@ iCompare(const void *vpRecord1, const void *vpRecord2)
 	}
 	return 0;
 } /* end of iCompare */
+
+/*
+ * pGetCharTableRecord - get the character table record
+ *
+ * returns a pointer to the record when found, otherwise NULL
+ */
+static const char_table_type *
+pGetCharTableRecord(USHORT usUnicode)
+{
+	char_table_type	tKey;
+
+	tKey.usUnicode = usUnicode;
+	tKey.usLocal = 0;
+	return (char_table_type *)bsearch(&tKey,
+			atCharTable,
+			elementsof(atCharTable), sizeof(atCharTable[0]),
+			iCompare);
+} /* end of pGetCharTableRecord */
+
+/*
+ * ucGetNbspValue - get the local representation of the non-breaking space
+ */
+UCHAR
+ucGetNbspValue(void)
+{
+	const char_table_type	*pRec;
+
+	pRec = pGetCharTableRecord(0x00a0);	/* Unicode non-breaking space */
+	if (pRec == NULL || pRec->usLocal > 0xff) {
+		DBG_MSG_C(pRec == NULL, "Non-breaking space record not found");
+		DBG_HEX_C(pRec != NULL, pRec->usLocal);
+		/* No value found, use the best guess */
+		return (UCHAR)0xa0;
+	}
+	return (UCHAR)pRec->usLocal;
+} /* end of ucGetNbspValue */
 
 /*
  * bReadCharacterMappingTable - read the mapping table
@@ -81,8 +189,9 @@ bReadCharacterMappingTable(const char *szFilename)
 {
 	FILE	*pFile;
 	char	*pcTmp;
-	long	lUnicode;
-	int	iFields, iLocal;
+	ULONG	ulUnicode;
+	UINT	uiLocal;
+	int	iFields;
 	char	szLine[81];
 
 	DBG_MSG(szFilename);
@@ -95,7 +204,6 @@ bReadCharacterMappingTable(const char *szFilename)
 	pFile = fopen(szFilename, "r");
 	if (pFile == NULL) {
 		DBG_MSG(szFilename);
-		werr(0, "I can't open your mapping file (%s)", szFilename);
 		return FALSE;
 	}
 	(void)memset(atCharTable, 0, sizeof(atCharTable));
@@ -107,7 +215,7 @@ bReadCharacterMappingTable(const char *szFilename)
 			/* Comment or empty line */
 			continue;
 		}
-		iFields = sscanf(szLine, "%x %lx %*s", &iLocal, &lUnicode);
+		iFields = sscanf(szLine, "%x %lx %*s", &uiLocal, &ulUnicode);
 		if (iFields != 2) {
 			pcTmp = strchr(szLine, '\r');
 			if (pcTmp != NULL) {
@@ -120,15 +228,16 @@ bReadCharacterMappingTable(const char *szFilename)
 			werr(0, "Syntax error in: '%s'", szLine);
 			continue;
 		}
-		if (iLocal > 0xff || lUnicode > 0xffff) {
-			werr(0, "Syntax error in: '%02x %04x'",
-					iLocal, lUnicode);
+		if (uiLocal > 0xff || ulUnicode > 0xffff) {
+			werr(0, "Syntax error in: '%02x %04lx'",
+					uiLocal, ulUnicode);
 			continue;
 		}
-		if (iLocal >= 0x80) {
-			atCharTable[iLocal - 0x80].iLocal = iLocal;
-			atCharTable[iLocal - 0x80].usUnicode =
-						(unsigned short)lUnicode;
+		if (uiLocal >= 0x80) {
+			atCharTable[uiLocal - 0x80].usLocal =
+						(USHORT)uiLocal;
+			atCharTable[uiLocal - 0x80].usUnicode =
+						(USHORT)ulUnicode;
 		}
 	}
 	(void)fclose(pFile);
@@ -147,56 +256,62 @@ bReadCharacterMappingTable(const char *szFilename)
 } /* end of bReadCharacterMappingTable */
 
 /*
- * iTranslateCharacters - Translate characters to local representation
+ * ulTranslateCharacters - Translate characters to local representation
  *
  * Translate all characters to local representation
  *
  * returns the translated character
  */
-int
-iTranslateCharacters(unsigned short usChar, long lFileOffset, BOOL bMacWord6)
+ULONG
+ulTranslateCharacters(USHORT usChar, ULONG ulFileOffset, int iWordVersion,
+	conversion_type eConversionType, encoding_type eEncoding,
+	BOOL bUseMacCharSet)
 {
-	char_table_type	tKey;
-	char_table_type	*pTmp;
+	const char_table_type	*pTmp;
 
-	if (bMacWord6) {
+	if (bUseMacCharSet) {
 		/* Translate special Macintosh characters */
 		if (usChar >= 0x80 && usChar <= 0xff) {
 			usChar = usMacRoman[usChar - 0x80];
 		}
+	} else if (iWordVersion == 0) {
+		/* From Code Page 850 to Unicode */
+		if (usChar >= 0x80 && usChar <= 0xff) {
+			usChar = usCp850[usChar - 0x80];
+		}
 	} else {
-		/* Translate implementation defined characters */
-		if (usChar >= 0x80 && usChar <= 0x9f) {
-			usChar = usCp1252[usChar - 0x80];
+		if (eEncoding == encoding_iso_8859_2) {
+			/* Translate implementation defined characters */
+			if (usChar >= 0x80 && usChar <= 0x9f) {
+				usChar = usCp1250[usChar - 0x80];
+			}
+			/* From Code Page 1250 to Unicode */
+			if (iWordVersion < 8 &&
+			    usChar >= 0xa0 && usChar <= 0xff) {
+				usChar = usCp1250[usChar - 0x80];
+			}
+		} else {
+			/* Translate implementation defined characters */
+			if (usChar >= 0x80 && usChar <= 0x9f) {
+				usChar = usCp1252[usChar - 0x80];
+			}
 		}
 	}
 
 	/* Microsoft Unicode to real Unicode */
-	switch (usChar) {
-	case UNICODE_MS_DIAMOND:
-		usChar = UNICODE_DIAMOND;
-		break;
-	case UNICODE_MS_UNDERTIE:
-		usChar = UNICODE_UNDERTIE;
-		break;
-	case UNICODE_MS_BLACK_SQUARE:
-		usChar = UNICODE_BLACK_SQUARE;
-		break;
-	case UNICODE_MS_BULLET:
-		usChar = UNICODE_BULLET;
-		break;
-	case UNICODE_MS_COPYRIGHT_SIGN:
-		usChar = UNICODE_COPYRIGHT_SIGN;
-		break;
-	default:
-		break;
+	if (usChar >= 0xf020 && usChar <= 0xf0ff) {
+		DBG_HEX_C(usPrivateArea[usChar - 0xf020] == 0x003f, usChar);
+		usChar = usPrivateArea[usChar - 0xf020];
 	}
 
 	/* Characters with a special meaning in Word */
 	switch (usChar) {
 	case IGNORE_CHARACTER:
+	case FOOTNOTE_SEPARATOR:
+	case FOOTNOTE_CONTINUATION:
 	case ANNOTATION:
 	case FRAME:
+	case LINE_FEED:
 	case WORD_SOFT_HYPHEN:
 	case UNICODE_HYPHENATION_POINT:
 		return IGNORE_CHARACTER;
@@ -204,13 +319,13 @@ iTranslateCharacters(unsigned short usChar, long lFileOffset, BOOL bMacWord6)
 	case TABLE_SEPARATOR:
 	case TAB:
 	case HARD_RETURN:
-	case FORM_FEED:
+	case PAGE_BREAK:
 	case PAR_END:
 	case COLUMN_FEED:
-		return (int)usChar;
+		return (ULONG)usChar;
 	case FOOTNOTE_OR_ENDNOTE:
-		NO_DBG_HEX(lFileOffset);
-		switch (eGetNotetype(lFileOffset)) {
+		NO_DBG_HEX(ulFileOffset);
+		switch (eGetNotetype(ulFileOffset)) {
 		case notetype_is_footnote:
 			return FOOTNOTE_CHAR;
 		case notetype_is_endnote:
@@ -219,56 +334,130 @@ iTranslateCharacters(unsigned short usChar, long lFileOffset, BOOL bMacWord6)
 			return UNKNOWN_NOTE_CHAR;
 		}
 	case WORD_UNBREAKABLE_JOIN:
-		return OUR_UNBREAKABLE_JOIN;
+		return (ULONG)OUR_UNBREAKABLE_JOIN;
 	default:
 		break;
 	}
 
-	/* Latin characters in an oriental text */
-	if (usChar >= 0xff01 && usChar <= 0xff5e) {
-		usChar -= 0xfee0;
+	if (eEncoding != encoding_utf8) {
+		/* Latin characters in an oriental text */
+		if (usChar >= 0xff01 && usChar <= 0xff5e) {
+			usChar -= 0xfee0;
+		}
 	}
 
-	/* US ASCII */
+	if (eConversionType == conversion_ps &&
+	    eEncoding == encoding_iso_8859_1) {
+		switch (usChar) {
+		case UNICODE_ELLIPSIS:
+			return 140;
+		case UNICODE_TRADEMARK_SIGN:
+			return 141;
+		case UNICODE_PER_MILLE_SIGN:
+			return 142;
+		case UNICODE_BULLET:
+		case UNICODE_BLACK_CLUB_SUIT:
+			return (ULONG)(UCHAR)OUR_BULLET_PS;
+		case UNICODE_LEFT_SINGLE_QMARK:
+			return 144;
+		case UNICODE_RIGHT_SINGLE_QMARK:
+			return 145;
+		case UNICODE_SINGLE_LEFT_ANGLE_QMARK:
+			return 146;
+		case UNICODE_SINGLE_RIGHT_ANGLE_QMARK:
+			return 147;
+		case UNICODE_LEFT_DOUBLE_QMARK:
+			return 148;
+		case UNICODE_RIGHT_DOUBLE_QMARK:
+			return 149;
+		case UNICODE_DOUBLE_LOW_9_QMARK:
+			return 150;
+		case UNICODE_EN_DASH:
+			return 151;
+		case UNICODE_EM_DASH:
+			return 152;
+		case UNICODE_MINUS_SIGN:
+			return 153;
+		case UNICODE_CAPITAL_LIGATURE_OE:
+			return 154;
+		case UNICODE_SMALL_LIGATURE_OE:
+			return 155;
+		case UNICODE_DAGGER:
+			return 156;
+		case UNICODE_DOUBLE_DAGGER:
+			return 157;
+		case UNICODE_SMALL_LIGATURE_FI:
+			return 158;
+		case UNICODE_SMALL_LIGATURE_FL:
+			return 159;
+		default:
+			break;
+		}
+	}
+
 	if (usChar < 0x80) {
+		/* US ASCII */
 		if (usChar < 0x20 || usChar == 0x7f) {
-			/* A control character slipped through */
+			/* Ignore control characters */
+			DBG_HEX(usChar);
+			DBG_FIXME();
 			return IGNORE_CHARACTER;
 		}
-		return (int)usChar;
+		return (ULONG)usChar;
+	}
+
+	if (eEncoding == encoding_utf8) {
+		/* No need to convert Unicode characters */
+		return (ULONG)usChar;
 	}
 
 	/* Unicode to local representation */
-	tKey.usUnicode = usChar;
-	tKey.iLocal = 0;
-	pTmp = (char_table_type *)bsearch(&tKey,
-			atCharTable,
-			elementsof(atCharTable), sizeof(atCharTable[0]),
-			iCompare);
+	pTmp = pGetCharTableRecord(usChar);
 	if (pTmp != NULL) {
-		return pTmp->iLocal;
+		DBG_HEX_C(usChar >= 0x7f && usChar <= 0x9f, usChar);
+		return (ULONG)pTmp->usLocal;
 	}
 
 	/* Fancy characters to simple US ASCII */
 	switch (usChar) {
 	case UNICODE_SMALL_F_HOOK:
-		return 'f';
+		return (ULONG)'f';
+	case UNICODE_GREEK_CAPITAL_CHI:
+		return (ULONG)'X';
+	case UNICODE_GREEK_SMALL_UPSILON:
+		return (ULONG)'v';
 	case UNICODE_MODIFIER_CIRCUMFLEX:
-		return '^';
+	case UNICODE_UPWARDS_ARROW:
+		return (ULONG)'^';
 	case UNICODE_SMALL_TILDE:
-		return '~';
+	case UNICODE_TILDE_OPERATOR:
+		return (ULONG)'~';
+	case UNICODE_EN_QUAD:
+	case UNICODE_EM_QUAD:
+	case UNICODE_EN_SPACE:
+	case UNICODE_EM_SPACE:
+	case UNICODE_THREE_PER_EM_SPACE:
+	case UNICODE_FOUR_PER_EM_SPACE:
+	case UNICODE_SIX_PER_EM_SPACE:
+	case UNICODE_FIGURE_SPACE:
+	case UNICODE_PUNCTUATION_SPACE:
+	case UNICODE_THIN_SPACE:
+	case UNICODE_LIGHT_SHADE:
+	case UNICODE_MEDIUM_SHADE:
+	case UNICODE_DARK_SHADE:
+		return (ULONG)' ';
 	case UNICODE_LEFT_DOUBLE_QMARK:
 	case UNICODE_RIGHT_DOUBLE_QMARK:
 	case UNICODE_DOUBLE_LOW_9_QMARK:
 	case UNICODE_DOUBLE_HIGH_REV_9_QMARK:
 	case UNICODE_DOUBLE_PRIME:
-		return '"';
+		return (ULONG)'"';
 	case UNICODE_LEFT_SINGLE_QMARK:
 	case UNICODE_RIGHT_SINGLE_QMARK:
 	case UNICODE_SINGLE_LOW_9_QMARK:
 	case UNICODE_SINGLE_HIGH_REV_9_QMARK:
 	case UNICODE_PRIME:
-		return '\'';
+		return (ULONG)'\'';
 	case UNICODE_HYPHEN:
 	case UNICODE_NON_BREAKING_HYPHEN:
 	case UNICODE_FIGURE_DASH:
@@ -276,36 +465,84 @@ iTranslateCharacters(unsigned short usChar, long lFileOffset, BOOL bMacWord6)
 	case UNICODE_EM_DASH:
 	case UNICODE_HORIZONTAL_BAR:
 	case UNICODE_MINUS_SIGN:
-		return '-';
+	case UNICODE_BD_LIGHT_HORIZONTAL:
+	case UNICODE_BD_DOUBLE_HORIZONTAL:
+		return (ULONG)'-';
 	case UNICODE_DOUBLE_VERTICAL_LINE:
-		return '|';
+	case UNICODE_BD_LIGHT_VERTICAL:
+	case UNICODE_BD_DOUBLE_VERTICAL:
+		return (ULONG)'|';
 	case UNICODE_DOUBLE_LOW_LINE:
-		return '_';
+		return (ULONG)'_';
 	case UNICODE_DAGGER:
-		return '-';
+		return (ULONG)'+';
 	case UNICODE_DOUBLE_DAGGER:
-		return '=';
+		return (ULONG)'#';
 	case UNICODE_BULLET:
-		return OUR_BULLET;
+	case UNICODE_BLACK_CLUB_SUIT:
+		return (ULONG)OUR_BULLET_TEXT;
 	case UNICODE_ONE_DOT_LEADER:
-		return '.';
+		return (ULONG)'.';
 	case UNICODE_ELLIPSIS:
-		return '.';
+		return (ULONG)OUR_ELLIPSIS;
+	case UNICODE_TRIANGULAR_BULLET:
 	case UNICODE_SINGLE_LEFT_ANGLE_QMARK:
-		return '<';
+	case UNICODE_LEFTWARDS_ARROW:
+		return (ULONG)'<';
 	case UNICODE_SINGLE_RIGHT_ANGLE_QMARK:
-		return '>';
+	case UNICODE_RIGHTWARDS_ARROW:
+		return (ULONG)'>';
 	case UNICODE_UNDERTIE:
-		return '-';
+		return (ULONG)'-';
+	case UNICODE_N_ARY_SUMMATION:
+		return (ULONG)'S';
 	case UNICODE_EURO_SIGN:
-		return 'E';
+		return (ULONG)'E';
+	case UNICODE_CIRCLE:
+	case UNICODE_SQUARE:
+		return (ULONG)'O';
 	case UNICODE_DIAMOND:
-		return '-';
+		return (ULONG)OUR_DIAMOND;
+	case UNICODE_KELVIN_SIGN:
+		return (ULONG)'K';
+	case UNICODE_DOWNWARDS_ARROW:
+		return (ULONG)'v';
 	case UNICODE_FRACTION_SLASH:
 	case UNICODE_DIVISION_SLASH:
-		return '/';
+		return (ULONG)'/';
+	case UNICODE_ASTERISK_OPERATOR:
+		return (ULONG)'*';
+	case UNICODE_RATIO:
+		return (ULONG)':';
+	case UNICODE_BD_LIGHT_DOWN_RIGHT:
+	case UNICODE_BD_LIGHT_DOWN_AND_LEFT:
+	case UNICODE_BD_LIGHT_UP_AND_RIGHT:
+	case UNICODE_BD_LIGHT_UP_AND_LEFT:
+	case UNICODE_BD_LIGHT_VERTICAL_AND_RIGHT:
+	case UNICODE_BD_LIGHT_VERTICAL_AND_LEFT:
+	case UNICODE_BD_LIGHT_DOWN_AND_HORIZONTAL:
+	case UNICODE_BD_LIGHT_UP_AND_HORIZONTAL:
+	case UNICODE_BD_LIGHT_VERTICAL_AND_HORIZONTAL:
+	case UNICODE_BD_DOUBLE_DOWN_AND_RIGHT:
+	case UNICODE_BD_DOUBLE_DOWN_AND_LEFT:
+	case UNICODE_BD_DOUBLE_UP_AND_RIGHT:
+	case UNICODE_BD_DOUBLE_UP_AND_LEFT:
+	case UNICODE_BD_DOUBLE_VERTICAL_AND_RIGHT:
+	case UNICODE_BD_DOUBLE_VERTICAL_AND_LEFT:
+	case UNICODE_BD_DOUBLE_DOWN_AND_HORIZONTAL:
+	case UNICODE_BD_DOUBLE_UP_AND_HORIZONTAL:
+	case UNICODE_BD_DOUBLE_VERTICAL_AND_HORIZONTAL:
 	case UNICODE_BLACK_SQUARE:
-		return '+';
+		return (ULONG)'+';
+	case UNICODE_HAIR_SPACE:
+	case UNICODE_ZERO_WIDTH_SPACE:
+	case UNICODE_ZERO_WIDTH_NON_JOINER:
+	case UNICODE_ZERO_WIDTH_JOINER:
+	case UNICODE_LEFT_TO_RIGHT_MARK:
+	case UNICODE_RIGHT_TO_LEFT_MARK:
+	case UNICODE_LEFT_TO_RIGHT_EMBEDDING:
+	case UNICODE_RIGHT_TO_LEFT_EMBEDDING:
+		return IGNORE_CHARACTER;
 	default:
 		break;
 	}
@@ -318,36 +555,52 @@ iTranslateCharacters(unsigned short usChar, long lFileOffset, BOOL bMacWord6)
 		return IGNORE_CHARACTER;
 	}
 
-	DBG_HEX_C(usChar < 0x3000 || usChar >= 0xd800, lFileOffset);
+	if (usChar >= 0xa0 && usChar <= 0xff) {
+		/* Before Word 97, Word did't use Unicode */
+		return (ULONG)usChar;
+	}
+
+	DBG_HEX_C(usChar < 0x3000 || usChar >= 0xd800, ulFileOffset);
 	DBG_HEX_C(usChar < 0x3000 || usChar >= 0xd800, usChar);
+	DBG_MSG_C(usChar >= 0xe000 && usChar < 0xf900, "Private Use Area");
 
 	/* Untranslated Unicode character */
-	return '?';
-} /* end of iTranslateCharacters */
+	return 0x3f;
+} /* end of ulTranslateCharacters */
 
 /*
- * iToUpper -  convert letter to upper case
+ * ulToUpper - convert letter to upper case
  *
  * This function converts a letter to upper case. Unlike toupper(3) this
  * function is independent from the settings of locale. This comes in handy
  * for people who have to read Word documents in more than one language or
  * contain more than one language.
  *
- * returns the converted letter, or iChar if the conversion was not possible.
+ * returns the converted letter, or ulChar if the conversion was not possible.
  */
-int iToUpper(int iChar)
+ULONG
+ulToUpper(ULONG ulChar)
 {
-	if ((iChar & ~0x7f) == 0) {
+	if (ulChar < 0x80) {
 		/* US ASCII: use standard function */
-		return toupper(iChar);
+		return (ULONG)toupper((int)ulChar);
 	}
-	if (iChar >= 0xe0 && iChar <= 0xfe && iChar != 0xf7) {
+	if (ulChar >= 0xe0 && ulChar <= 0xfe && ulChar != 0xf7) {
 		/*
 		 * Lower case accented characters
 		 * 0xf7 is Division sign; 0xd7 is Multiplication sign
 		 * 0xff is y with diaeresis; 0xdf is Sharp s
 		 */
-		return iChar & ~0x20;
+		return ulChar & ~0x20;
 	}
-	return iChar;
-} /* end of iToUpper */
+#if defined(__STDC_ISO_10646__)
+	/*
+	 * If this is ISO C99 and all locales have wchar_t = ISO 10646
+	 * (e.g., glibc 2.2 or newer), then use standard function
+	 */
+	if (ulChar > 0xff) {
+		return (ULONG)towupper((wint_t)ulChar);
+	}
+#endif /* __STDC_ISO_10646__ */
+	return ulChar;
+} /* end of ulToUpper */

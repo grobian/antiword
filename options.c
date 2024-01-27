@@ -1,6 +1,6 @@
 /*
  * options.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
  *
  * Description:
  * Read and write the options
@@ -13,7 +13,7 @@
 #include "wimpt.h"
 #else
 #include <stdlib.h>
-#if defined(__dos)
+#if defined(__dos) || defined(N_PLAT_NLM)
 extern int getopt(int, char **, const char *);
 #else
 #include <unistd.h>
@@ -37,9 +37,9 @@ static options_type	tOptionsCurr;
 static options_type	tOptionsTemp;
 #else
 typedef struct papersize_tag {
-	char		szName[16];	/* Papersize name */
-	unsigned short	usWidth;	/* In points */
-	unsigned short	usHeight;	/* In points */
+	char	szName[16];	/* Papersize name */
+	USHORT	usWidth;	/* In points */
+	USHORT	usHeight;	/* In points */
 } papersize_type;
 
 static const papersize_type atPaperSizes[] = {
@@ -64,9 +64,9 @@ static const papersize_type atPaperSizes[] = {
 static const options_type	tOptionsDefault = {
 	DEFAULT_SCREEN_WIDTH,
 #if defined(__riscos)
-	TRUE,
+	conversion_draw,
 #else
-	FALSE,
+	conversion_text,
 #endif /* __riscos */
 	TRUE,
 	FALSE,
@@ -93,15 +93,18 @@ iReadOptions(int argc, char **argv)
 {
 #if defined(__riscos)
 	FILE	*pFile;
+	const char	*szAlphabet;
+	int	iAlphabet;
 	char	szLine[81];
 #else
 	extern	char	*optarg;
 	extern int	optind;
 	const papersize_type	*pPaperSize;
-	const char	*szHome;
+	const char	*szHome, *szAntiword;
 	char	*pcChar, *szTmp;
 	int	iChar;
-	BOOL	bPostScript, bFound;
+	BOOL	bFound;
+	char	szLeafname[32+1];
 	char	szMappingFile[PATH_MAX+1];
 #endif /* __riscos */
 	int	iTmp;
@@ -137,8 +140,10 @@ iReadOptions(int argc, char **argv)
 				DBG_DEC(tOptionsCurr.bAutofiletypeAllowed);
 			} else if (sscanf(szLine, USE_OUTLINEFONTS, &iTmp)
 								== 1) {
-				tOptionsCurr.bUseOutlineFonts = iTmp != 0;
-				DBG_DEC(tOptionsCurr.bUseOutlineFonts);
+				tOptionsCurr.eConversionType =
+					iTmp == 0 ?
+					conversion_text : conversion_draw;
+				DBG_DEC(tOptionsCurr.eConversionType);
 			} else if (sscanf(szLine, SHOW_IMAGES, &iTmp)
 								== 1) {
 				tOptionsCurr.eImageLevel = iTmp != 0 ?
@@ -152,12 +157,25 @@ iReadOptions(int argc, char **argv)
 				if (iTmp >= MIN_SCALE_FACTOR &&
 				    iTmp <= MAX_SCALE_FACTOR) {
 					tOptionsCurr.iScaleFactor = iTmp;
+					DBG_DEC(tOptionsCurr.iScaleFactor);
 				}
 			}
 		}
 		(void)fclose(pFile);
 	}
-	if (bReadCharacterMappingTable("<AntiWord$MappingFile>")) {
+	iAlphabet = iReadCurrentAlphabetNumber();
+	switch (iAlphabet) {
+	case 101:	/* ISO-8859-1 aka Latin1 */
+		szAlphabet = "<AntiWord$Latin1>";
+		break;
+	case 112:	/* ISO-8859-15 aka Latin9 */
+		szAlphabet = "<AntiWord$Latin9>";
+		break;
+	default:
+		werr(0, "Alphabet '%d' is not supported", iAlphabet);
+		return -1;
+	}
+	if (bReadCharacterMappingTable(szAlphabet)) {
 		return 1;
 	}
 	return -1;
@@ -178,41 +196,18 @@ iReadOptions(int argc, char **argv)
 			DBG_DEC(tOptionsCurr.iParagraphBreak);
 		}
 	}
-/* Command line */
-	szHome = szGetHomeDirectory();
-	if (strlen(szHome) >= sizeof(szMappingFile) -
-			sizeof(FILE_SEPARATOR) -
-			sizeof(MAPPING_FILE_DEFAULT_1)) {
-		werr(0, "The name of your home directory is too long");
-		return -1;
+	if (is_locale_utf8()) {
+		tOptionsCurr.eEncoding = encoding_utf8;
+		strcpy(szLeafname, MAPPING_FILE_DEFAULT_8);
+	} else {
+		tOptionsCurr.eEncoding = encoding_iso_8859_1;
+		strcpy(szLeafname, MAPPING_FILE_DEFAULT_1);
 	}
-	sprintf(szMappingFile, "%s" FILE_SEPARATOR MAPPING_FILE_DEFAULT_1,
-		szHome);
-	bPostScript = FALSE;
-	while ((iChar = getopt(argc, argv, "LX:hi:m:p:stw:")) != -1) {
+/* Command line */
+	while ((iChar = getopt(argc, argv, "Lhi:m:p:stw:x:")) != -1) {
 		switch (iChar) {
 		case 'L':
 			tOptionsCurr.bUseLandscape = TRUE;
-			break;
-		case 'X':
-			iTmp = (int)strtol(optarg, &pcChar, 10);
-			switch (iTmp) {
-			case 1:
-				tOptionsCurr.eEncoding = encoding_iso_8859_1;
-				sprintf(szMappingFile,
-				"%s" FILE_SEPARATOR MAPPING_FILE_DEFAULT_1,
-					szHome);
-				break;
-			case 2:
-				tOptionsCurr.eEncoding = encoding_iso_8859_2;
-				sprintf(szMappingFile,
-				"%s" FILE_SEPARATOR MAPPING_FILE_DEFAULT_2,
-					szHome);
-				break;
-			default:
-				break;
-			}
-			DBG_MSG(szMappingFile);
 			break;
 		case 'h':
 			return 0;
@@ -241,24 +236,23 @@ iReadOptions(int argc, char **argv)
 			DBG_DEC(tOptionsCurr.eImageLevel);
 			break;
 		case 'm':
-			if (optarg[0] == '/') {
-				if (strlen(optarg) < sizeof(szMappingFile)) {
-					strcpy(szMappingFile, optarg);
-				}
-			} else {
-				if (strlen(szHome) + strlen(optarg) <
-						sizeof(szMappingFile) -
-						sizeof(ANTIWORD_DIR) -
-						2 * sizeof(FILE_SEPARATOR)) {
-					sprintf(szMappingFile,
-			"%s" FILE_SEPARATOR ANTIWORD_DIR FILE_SEPARATOR "%s",
-						szHome, optarg);
-				}
+			if (tOptionsCurr.eConversionType == conversion_xml) {
+				werr(0, "XML doesn't need a mapping file");
+				break;
 			}
-			DBG_MSG(szMappingFile);
+			strncpy(szLeafname, optarg, sizeof(szLeafname) - 1);
+			szLeafname[sizeof(szLeafname) - 1] = '\0';
+			DBG_MSG(szLeafname);
+			if (STRCEQ(szLeafname, MAPPING_FILE_DEFAULT_8)) {
+				tOptionsCurr.eEncoding = encoding_utf8;
+			} else if (STRCEQ(szLeafname, MAPPING_FILE_DEFAULT_2)) {
+				tOptionsCurr.eEncoding = encoding_iso_8859_2;
+			} else {
+				tOptionsCurr.eEncoding = encoding_iso_8859_1;
+			}
+			DBG_DEC(tOptionsCurr.eEncoding);
 			break;
 		case 'p':
-			bPostScript = TRUE;
 			bFound = FALSE;
 			for (pPaperSize = atPaperSizes;
 			     pPaperSize->szName[0] != '\0';
@@ -268,7 +262,7 @@ iReadOptions(int argc, char **argv)
 				}
 				DBG_DEC(pPaperSize->usWidth);
 				DBG_DEC(pPaperSize->usHeight);
-				tOptionsCurr.bUseOutlineFonts = TRUE;
+				tOptionsCurr.eConversionType = conversion_ps;
 				tOptionsCurr.iPageHeight =
 						(int)pPaperSize->usHeight;
 				tOptionsCurr.iPageWidth =
@@ -285,7 +279,7 @@ iReadOptions(int argc, char **argv)
 			tOptionsCurr.bHideHiddenText = FALSE;
 			break;
 		case 't':
-			tOptionsCurr.bUseOutlineFonts = FALSE;
+			tOptionsCurr.eConversionType = conversion_text;
 			break;
 		case 'w':
 			iTmp = (int)strtol(optarg, &pcChar, 10);
@@ -299,30 +293,95 @@ iReadOptions(int argc, char **argv)
 				DBG_DEC(tOptionsCurr.iParagraphBreak);
 			}
 			break;
+		case 'x':
+			if (STREQ(optarg, "db")) {
+				tOptionsCurr.iParagraphBreak = 0;
+				tOptionsCurr.eConversionType = conversion_xml;
+				tOptionsCurr.eEncoding = encoding_utf8;
+			} else {
+				werr(0, "-x %s is not supported", optarg);
+				return -1;
+			}
+			break;
 		default:
 			return -1;
 		}
 	}
-	if (bPostScript) {
+
+	if (tOptionsCurr.eConversionType == conversion_ps &&
+	    tOptionsCurr.eEncoding == encoding_utf8) {
+		werr(0,
+		"The combination PostScript and UTF-8 is not supported");
+		return -1;
+	}
+
+	if (tOptionsCurr.eConversionType == conversion_ps) {
+		/* PostScript mode */
 		if (tOptionsCurr.bUseLandscape) {
 			/* Swap the page height and width */
 			iTmp = tOptionsCurr.iPageHeight;
 			tOptionsCurr.iPageHeight = tOptionsCurr.iPageWidth;
 			tOptionsCurr.iPageWidth = iTmp;
 		}
-		/*
-		 * In PostScript mode the paragraph break depends
-		 * on the width of the paper
-		 */
+		/* The paragraph break depends on the width of the paper */
 		tOptionsCurr.iParagraphBreak = iMilliPoints2Char(
 			(long)tOptionsCurr.iPageWidth * 1000 -
 			lDrawUnits2MilliPoints(
 				PS_LEFT_MARGIN + PS_RIGHT_MARGIN));
 		DBG_DEC(tOptionsCurr.iParagraphBreak);
 	}
-	if (bReadCharacterMappingTable(szMappingFile)) {
-		return optind;
+
+	/* Try the environment version of the mapping file */
+	szAntiword = szGetAntiwordDirectory();
+	if (szAntiword != NULL && szAntiword[0] != '\0') {
+	    if (strlen(szAntiword) + strlen(szLeafname) <
+		sizeof(szMappingFile) -
+		sizeof(FILE_SEPARATOR)) {
+			sprintf(szMappingFile,
+				"%s" FILE_SEPARATOR "%s",
+				szAntiword, szLeafname);
+			DBG_MSG(szMappingFile);
+			if (bReadCharacterMappingTable(szMappingFile)) {
+				return optind;
+			}
+		} else {
+			werr(0, "Environment mappingfilename ignored");
+		}
 	}
+	/* Try the local version of the mapping file */
+	szHome = szGetHomeDirectory();
+	if (strlen(szHome) + strlen(szLeafname) <
+	    sizeof(szMappingFile) -
+	    sizeof(ANTIWORD_DIR) -
+	    2 * sizeof(FILE_SEPARATOR)) {
+		sprintf(szMappingFile,
+			"%s" FILE_SEPARATOR ANTIWORD_DIR FILE_SEPARATOR "%s",
+			szHome, szLeafname);
+		DBG_MSG(szMappingFile);
+		if (bReadCharacterMappingTable(szMappingFile)) {
+			return optind;
+		}
+	} else {
+		werr(0, "Local mappingfilename too long, ignored");
+	}
+	/* Try the global version of the mapping file */
+	if (strlen(szLeafname) <
+	    sizeof(szMappingFile) -
+	    sizeof(GLOBAL_ANTIWORD_DIR) -
+	    sizeof(FILE_SEPARATOR)) {
+		sprintf(szMappingFile,
+			GLOBAL_ANTIWORD_DIR FILE_SEPARATOR "%s",
+			szLeafname);
+		DBG_MSG(szMappingFile);
+		if (bReadCharacterMappingTable(szMappingFile)) {
+			return optind;
+		}
+	} else {
+		werr(0, "Global mappingfilename too long, ignored");
+	}
+	werr(0, "I can't open your mapping file (%s)\n"
+		"It is not in '%s" FILE_SEPARATOR ANTIWORD_DIR "' nor in '"
+		GLOBAL_ANTIWORD_DIR "'.", szLeafname, szHome);
 	return -1;
 #endif /* __riscos */
 } /* end of iReadOptions */
@@ -370,7 +429,7 @@ vWriteOptions(void)
 	(void)fprintf(pFile, AUTOFILETYPE"\n",
 		tOptionsCurr.bAutofiletypeAllowed);
 	(void)fprintf(pFile, USE_OUTLINEFONTS"\n",
-		tOptionsCurr.bUseOutlineFonts);
+		tOptionsCurr.eConversionType == conversion_text ? 0 : 1);
 	(void)fprintf(pFile, SHOW_IMAGES"\n",
 		tOptionsCurr.eImageLevel == level_no_images ? 0 : 1);
 	(void)fprintf(pFile, HIDE_HIDDEN_TEXT"\n",
@@ -405,7 +464,7 @@ vChoicesOpenAction(wimp_w tWindow)
 					tOptionsTemp.bAutofiletypeAllowed);
 	vUpdateRadioButton(tWindow, CHOICES_HIDDEN_TEXT_BUTTON,
 					tOptionsTemp.bHideHiddenText);
-	if (tOptionsTemp.bUseOutlineFonts) {
+	if (tOptionsTemp.eConversionType == conversion_draw) {
 		vUpdateRadioButton(tWindow,
 			CHOICES_WITH_IMAGES_BUTTON,
 			tOptionsTemp.eImageLevel != level_no_images);
@@ -438,21 +497,21 @@ vDefaultButtonAction(wimp_w tWindow)
 	vUpdateRadioButton(tWindow, CHOICES_BREAK_BUTTON, TRUE);
 	vUpdateRadioButton(tWindow, CHOICES_NO_BREAK_BUTTON, FALSE);
 	vUpdateWriteableNumber(tWindow, CHOICES_BREAK_WRITEABLE,
-				tOptionsTemp.iParagraphBreak);
+			tOptionsTemp.iParagraphBreak);
 	vUpdateRadioButton(tWindow, CHOICES_AUTOFILETYPE_BUTTON,
-				tOptionsTemp.bAutofiletypeAllowed);
+			tOptionsTemp.bAutofiletypeAllowed);
 	vUpdateRadioButton(tWindow, CHOICES_HIDDEN_TEXT_BUTTON,
-				tOptionsTemp.bHideHiddenText);
+			tOptionsTemp.bHideHiddenText);
 	vUpdateRadioButton(tWindow, CHOICES_WITH_IMAGES_BUTTON,
-				tOptionsTemp.bUseOutlineFonts &&
-				tOptionsTemp.eImageLevel != level_no_images);
+			tOptionsTemp.eConversionType == conversion_draw &&
+			tOptionsTemp.eImageLevel != level_no_images);
 	vUpdateRadioButton(tWindow, CHOICES_NO_IMAGES_BUTTON,
-				tOptionsTemp.bUseOutlineFonts &&
-				tOptionsTemp.eImageLevel == level_no_images);
+			tOptionsTemp.eConversionType == conversion_draw &&
+			tOptionsTemp.eImageLevel == level_no_images);
 	vUpdateRadioButton(tWindow, CHOICES_TEXTONLY_BUTTON,
-				!tOptionsTemp.bUseOutlineFonts);
+			tOptionsTemp.eConversionType == conversion_text);
 	vUpdateWriteableNumber(tWindow, CHOICES_SCALE_WRITEABLE,
-				tOptionsTemp.iScaleFactor);
+			tOptionsTemp.iScaleFactor);
 } /* end of vDefaultButtonAction */
 
 /*
@@ -543,7 +602,8 @@ vChangeHiddenText(wimp_w tWindow)
 static void
 vUseFontsImages(BOOL bUseOutlineFonts, BOOL bShowImages)
 {
-	tOptionsTemp.bUseOutlineFonts = bUseOutlineFonts;
+	tOptionsTemp.eConversionType =
+		bUseOutlineFonts ? conversion_draw : conversion_text;
 	tOptionsTemp.eImageLevel =
 		bUseOutlineFonts && bShowImages ?
 		level_default : level_no_images;

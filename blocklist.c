@@ -1,9 +1,9 @@
 /*
  * blocklist.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
  *
  * Description:
- * Build, read and destroy a list of Word text blocks
+ * Build, read and destroy the lists of Word "text" blocks
  */
 
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 
 
 /*
- * Privat structure to hide the way the information
+ * Private structure to hide the way the information
  * is stored from the rest of the program
  */
 typedef struct list_mem_tag {
@@ -19,60 +19,62 @@ typedef struct list_mem_tag {
 	struct list_mem_tag	*pNext;
 } list_mem_type;
 
-/* Variables to describe the start of the five block lists */
+/* Variables to describe the start of the block lists */
 static list_mem_type	*pTextAnchor = NULL;
 static list_mem_type	*pFootAnchor = NULL;
-static list_mem_type	*pUnused1Anchor = NULL;
+static list_mem_type	*pHdrFtrAnchor = NULL;
+static list_mem_type	*pMacroAnchor = NULL;
+static list_mem_type	*pAnnotationAnchor = NULL;
 static list_mem_type	*pEndAnchor = NULL;
-static list_mem_type	*pUnused2Anchor = NULL;
-/* Variable needed to read the block list */
+static list_mem_type	*pTextBoxAnchor = NULL;
+static list_mem_type	*pHdrTextBoxAnchor = NULL;
+/* Variable needed to build the block list */
 static list_mem_type	*pBlockLast = NULL;
-/* Variable needed to read the text block list */
-static list_mem_type	*pTextBlockCurrent = NULL;
-/* Variable needed to read the footnote block list */
-static list_mem_type	*pFootBlockCurrent = NULL;
-/* Variable needed to read the endnote block list */
-static list_mem_type	*pEndBlockCurrent = NULL;
+/* Variable needed to read a block list */
+static list_mem_type	*pBlockCurrent = NULL;
 /* Last block read */
-static unsigned char	aucBlock[BIG_BLOCK_SIZE];
+static UCHAR		aucBlock[BIG_BLOCK_SIZE];
 
 
 /*
- * vDestroyTextBlockList - destroy the text block list
+ * pFreeOneList - free a text block list
+ *
+ * Will always return NULL
+ */
+static list_mem_type *
+pFreeOneList(list_mem_type *pAnchor)
+{
+	list_mem_type	*pCurr, *pNext;
+
+	pCurr = pAnchor;
+	while (pCurr != NULL) {
+		pNext = pCurr->pNext;
+		pCurr = xfree(pCurr);
+		pCurr = pNext;
+	}
+	return NULL;
+} /* end of pFreeOneList */
+
+/*
+ * vDestroyTextBlockList - destroy the text block lists
  */
 void
 vDestroyTextBlockList(void)
 {
-	list_mem_type	*apAnchor[5];
-	list_mem_type	*pCurr, *pNext;
-	int	iIndex;
-
 	DBG_MSG("vDestroyTextBlockList");
 
-	apAnchor[0] = pTextAnchor;
-	apAnchor[1] = pFootAnchor;
-	apAnchor[2] = pUnused1Anchor;
-	apAnchor[3] = pEndAnchor;
-	apAnchor[4] = pUnused2Anchor;
-
-	for (iIndex = 0; iIndex < 5; iIndex++) {
-		pCurr = apAnchor[iIndex];
-		while (pCurr != NULL) {
-			pNext = pCurr->pNext;
-			pCurr = xfree(pCurr);
-			pCurr = pNext;
-		}
-	}
-	/* Show that there are no lists any more */
-	pTextAnchor = NULL;
-	pFootAnchor = NULL;
-	pUnused1Anchor = NULL;
-	pEndAnchor = NULL;
-	pUnused2Anchor = NULL;
+	/* Free the lists one by one */
+	pTextAnchor = pFreeOneList(pTextAnchor);
+	pFootAnchor = pFreeOneList(pFootAnchor);
+	pHdrFtrAnchor = pFreeOneList(pHdrFtrAnchor);
+	pMacroAnchor = pFreeOneList(pMacroAnchor);
+	pAnnotationAnchor = pFreeOneList(pAnnotationAnchor);
+	pEndAnchor = pFreeOneList(pEndAnchor);
+	pTextBoxAnchor = pFreeOneList(pTextBoxAnchor);
+	pHdrTextBoxAnchor = pFreeOneList(pHdrTextBoxAnchor);
 	/* Reset all the controle variables */
 	pBlockLast = NULL;
-	pTextBlockCurrent = NULL;
-	pFootBlockCurrent = NULL;
+	pBlockCurrent = NULL;
 } /* end of vDestroyTextBlockList */
 
 /*
@@ -81,37 +83,43 @@ vDestroyTextBlockList(void)
  * returns: TRUE when successful, otherwise FALSE
  */
 BOOL
-bAdd2TextBlockList(text_block_type *pTextBlock)
+bAdd2TextBlockList(const text_block_type *pTextBlock)
 {
 	list_mem_type	*pListMember;
 
 	fail(pTextBlock == NULL);
-	fail(pTextBlock->lFileOffset < 0);
-	fail(pTextBlock->lTextOffset < 0);
-	fail(pTextBlock->tLength == 0);
-	fail(pTextBlock->bUsesUnicode && odd(pTextBlock->tLength));
+	fail(pTextBlock->ulFileOffset == FC_INVALID);
+	fail(pTextBlock->ulCharPos == CP_INVALID);
+	fail(pTextBlock->ulLength == 0);
+	fail(pTextBlock->bUsesUnicode && odd(pTextBlock->ulLength));
 
 	NO_DBG_MSG("bAdd2TextBlockList");
-	NO_DBG_HEX(pTextBlock->lFileOffset);
-	NO_DBG_HEX(pTextBlock->lTextOffset);
-	NO_DBG_HEX(pTextBlock->tLength);
+	NO_DBG_HEX(pTextBlock->ulFileOffset);
+	NO_DBG_HEX(pTextBlock->ulCharPos);
+	NO_DBG_HEX(pTextBlock->ulLength);
 	NO_DBG_DEC(pTextBlock->bUsesUnicode);
+	NO_DBG_DEC(pTextBlock->usPropMod);
 
-	if (pTextBlock->lFileOffset < 0 ||
-	    pTextBlock->lTextOffset < 0 ||
-	    pTextBlock->tLength == 0) {
+	if (pTextBlock->ulFileOffset == FC_INVALID ||
+	    pTextBlock->ulCharPos == CP_INVALID ||
+	    pTextBlock->ulLength == 0 ||
+	    (pTextBlock->bUsesUnicode && odd(pTextBlock->ulLength))) {
 		werr(0, "Software (textblock) error");
 		return FALSE;
 	}
-	/* Check for continuous blocks of the same character size */
+	/*
+	 * Check for continuous blocks of the same character size and
+	 * the same properties modifier
+	 */
 	if (pBlockLast != NULL &&
-	    pBlockLast->tInfo.lFileOffset +
-	     (long)pBlockLast->tInfo.tLength == pTextBlock->lFileOffset &&
-	    pBlockLast->tInfo.lTextOffset +
-	     (long)pBlockLast->tInfo.tLength == pTextBlock->lTextOffset &&
-	    pBlockLast->tInfo.bUsesUnicode == pTextBlock->bUsesUnicode) {
+	    pBlockLast->tInfo.ulFileOffset +
+	     pBlockLast->tInfo.ulLength == pTextBlock->ulFileOffset &&
+	    pBlockLast->tInfo.ulCharPos +
+	     pBlockLast->tInfo.ulLength == pTextBlock->ulCharPos &&
+	    pBlockLast->tInfo.bUsesUnicode == pTextBlock->bUsesUnicode &&
+	    pBlockLast->tInfo.usPropMod == pTextBlock->usPropMod) {
 		/* These are continous blocks */
-		pBlockLast->tInfo.tLength += pTextBlock->tLength;
+		pBlockLast->tInfo.ulLength += pTextBlock->ulLength;
 		return TRUE;
 	}
 	/* Make a new block */
@@ -129,444 +137,246 @@ bAdd2TextBlockList(text_block_type *pTextBlock)
 	return TRUE;
 } /* end of bAdd2TextBlockList */
 
+/*
+ * vSpitList - Split the list in two
+ */
+static void
+vSpitList(list_mem_type **ppAnchorCurr, list_mem_type **ppAnchorNext,
+	ULONG ulListLen)
+{
+	list_mem_type	*pCurr;
+	long		lCharsToGo, lBytesTooFar;
+
+	fail(ppAnchorCurr == NULL);
+	fail(ppAnchorNext == NULL);
+	fail(ulListLen > (ULONG)LONG_MAX);
+
+	pCurr = NULL;
+	lCharsToGo = (long)ulListLen;
+	lBytesTooFar = -1;
+	if (ulListLen != 0) {
+		DBG_DEC(ulListLen);
+		for (pCurr = *ppAnchorCurr;
+		     pCurr != NULL;
+		     pCurr = pCurr->pNext) {
+			NO_DBG_DEC(pCurr->tInfo.ulLength);
+			fail(pCurr->tInfo.ulLength == 0);
+			fail(pCurr->tInfo.ulLength > (ULONG)LONG_MAX);
+			if (pCurr->tInfo.bUsesUnicode) {
+				fail(odd(pCurr->tInfo.ulLength));
+				lCharsToGo -= (long)(pCurr->tInfo.ulLength / 2);
+				if (lCharsToGo < 0) {
+					lBytesTooFar = -2 * lCharsToGo;
+				}
+			} else {
+				lCharsToGo -= (long)pCurr->tInfo.ulLength;
+				if (lCharsToGo < 0) {
+					lBytesTooFar = -lCharsToGo;
+				}
+			}
+			if (lCharsToGo <= 0) {
+				break;
+			}
+		}
+	}
+/* Split the list */
+	if (ulListLen == 0) {
+		/* Current blocklist is empty */
+		*ppAnchorNext = *ppAnchorCurr;
+		*ppAnchorCurr = NULL;
+	} else if (pCurr == NULL) {
+		/* No blocks for the next list */
+		*ppAnchorNext = NULL;
+	} else if (lCharsToGo == 0) {
+		/* Move the integral number of blocks to the next list */
+		*ppAnchorNext = pCurr->pNext;
+		pCurr->pNext = NULL;
+	} else {
+		/* Split the part current block list, part next block list */
+		DBG_DEC(lBytesTooFar);
+		fail(lBytesTooFar <= 0);
+		*ppAnchorNext = xmalloc(sizeof(list_mem_type));
+		DBG_HEX(pCurr->tInfo.ulFileOffset);
+		(*ppAnchorNext)->tInfo.ulFileOffset =
+				pCurr->tInfo.ulFileOffset +
+				pCurr->tInfo.ulLength -
+				lBytesTooFar;
+		DBG_HEX((*ppAnchorNext)->tInfo.ulFileOffset);
+		DBG_HEX(pCurr->tInfo.ulCharPos);
+		(*ppAnchorNext)->tInfo.ulCharPos =
+				pCurr->tInfo.ulCharPos +
+				pCurr->tInfo.ulLength -
+				lBytesTooFar;
+		DBG_HEX((*ppAnchorNext)->tInfo.ulCharPos);
+		(*ppAnchorNext)->tInfo.ulLength = (ULONG)lBytesTooFar;
+		pCurr->tInfo.ulLength -= (ULONG)lBytesTooFar;
+		(*ppAnchorNext)->tInfo.bUsesUnicode = pCurr->tInfo.bUsesUnicode;
+		(*ppAnchorNext)->tInfo.usPropMod = pCurr->tInfo.usPropMod;
+		/* Move the integral number of blocks to the next list */
+		(*ppAnchorNext)->pNext = pCurr->pNext;
+		pCurr->pNext = NULL;
+	}
+} /* end of vSpitList */
+
+#if defined(DEBUG) || defined(__riscos)
+/*
+ * ulComputeListLength - compute the length of a list
+ *
+ * returns the list length in characters
+ */
+static ULONG
+ulComputeListLength(const list_mem_type *pAnchor)
+{
+	const list_mem_type	*pCurr;
+	ULONG		ulTotal;
+
+	ulTotal = 0;
+	for (pCurr = pAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
+		fail(pCurr->tInfo.ulLength == 0);
+		if (pCurr->tInfo.bUsesUnicode) {
+			fail(odd(pCurr->tInfo.ulLength));
+			ulTotal += pCurr->tInfo.ulLength / 2;
+		} else {
+			ulTotal += pCurr->tInfo.ulLength;
+		}
+	}
+	return ulTotal;
+} /* end of ulComputeListLength */
+#endif /* DEBUG || __riscos */
+
+#if defined(DEBUG)
+/*
+ * vCheckList - check the number of bytes in a block list
+ */
+static void
+vCheckList(const list_mem_type *pAnchor, ULONG ulListLen, char *szMsg)
+{
+	ULONG		ulTotal;
+
+	ulTotal = ulComputeListLength(pAnchor);
+	DBG_DEC(ulTotal);
+	if (ulTotal != ulListLen) {
+		DBG_DEC(ulListLen);
+		werr(1, szMsg);
+	}
+} /* end of vCheckList */
+#endif /* DEBUG */
 
 /*
- * vSplitBlockList - split the block list in three parts
+ * bIsEmptyBox - check to see if the given text box is empty
+ */
+static BOOL
+bIsEmptyBox(FILE *pFile, const list_mem_type *pAnchor)
+{
+	const list_mem_type	*pCurr;
+	size_t	tIndex, tSize;
+	UCHAR	*aucBuffer;
+	char	cChar;
+
+	fail(pFile == NULL);
+
+	if (pAnchor == NULL) {
+		return TRUE;
+	}
+
+	aucBuffer = NULL;
+	for (pCurr = pAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
+		fail(pCurr->tInfo.ulLength == 0);
+		tSize = (size_t)pCurr->tInfo.ulLength;
+#if defined(__dos)
+		if (pCurr->tInfo.ulLength > 0xffffUL) {
+			tSize = 0xffff;
+		}
+#endif /* __dos */
+		aucBuffer = xmalloc(tSize);
+		if (!bReadBytes(aucBuffer, tSize,
+				pCurr->tInfo.ulFileOffset, pFile)) {
+			aucBuffer = xfree(aucBuffer);
+			return FALSE;
+		}
+		for (tIndex = 0; tIndex < tSize; tIndex++) {
+			cChar = (char)aucBuffer[tIndex];
+			switch (cChar) {
+			case '\0': case '\r': case '\n':
+			case '\f': case '\t': case '\v':
+			case ' ':
+				break;
+			default:
+				aucBuffer = xfree(aucBuffer);
+				return FALSE;
+			}
+		}
+	}
+	aucBuffer = xfree(aucBuffer);
+	return TRUE;
+} /* end of bIsEmptyBox */
+
+/*
+ * vSplitBlockList - split the block list in the various parts
  *
  * Split the blocklist in a Text block list, a Footnote block list, a
- * Endnote block list and two Unused lists.
+ * HeaderFooter block list, a Macro block list, an Annotation block list,
+ * an Endnote block list, a TextBox list and a HeaderTextBox list.
  *
  * NOTE:
- * The various i*Len input parameters are given in characters, but the
+ * The various ul*Len input parameters are given in characters, but the
  * length of the blocks are in bytes.
  */
 void
-vSplitBlockList(size_t tTextLen, size_t tFootnoteLen, size_t tUnused1Len,
-	size_t tEndnoteLen, size_t tUnused2Len, BOOL bMustExtend)
+vSplitBlockList(FILE *pFile, ULONG ulTextLen, ULONG ulFootnoteLen,
+	ULONG ulHdrFtrLen, ULONG ulMacroLen, ULONG ulAnnotationLen,
+	ULONG ulEndnoteLen, ULONG ulTextBoxLen, ULONG ulHdrTextBoxLen,
+	BOOL bMustExtend)
 {
-	list_mem_type	*apAnchors[5];
-	list_mem_type	*pGarbageAnchor, *pCurr, *pNext;
-	int		iIndex, iCharsToGo, iBytesTooFar;
-#if defined(DEBUG)
-	size_t		tTotal;
-#endif /* DEBUG */
+	list_mem_type	*apAnchors[8];
+	list_mem_type	*pGarbageAnchor, *pCurr;
+	size_t		tIndex;
 
 	DBG_MSG("vSplitBlockList");
 
-/* Text block list */
-	pCurr = NULL;
-	iCharsToGo = (int)tTextLen;
-	iBytesTooFar = -1;
-	if (tTextLen != 0) {
-		DBG_MSG("Text block list");
-		DBG_DEC(tTextLen);
-		for (pCurr = pTextAnchor;
-		     pCurr != NULL;
-		     pCurr = pCurr->pNext) {
-			NO_DBG_DEC(pCurr->tInfo.tLength);
-			fail(pCurr->tInfo.tLength == 0);
-			if (pCurr->tInfo.bUsesUnicode) {
-				fail(odd(pCurr->tInfo.tLength));
-				iCharsToGo -= (int)(pCurr->tInfo.tLength / 2);
-				if (iCharsToGo < 0) {
-					iBytesTooFar = -2 * iCharsToGo;
-				}
-			} else {
-				iCharsToGo -= (int)pCurr->tInfo.tLength;
-				if (iCharsToGo < 0) {
-					iBytesTooFar = -iCharsToGo;
-				}
-			}
-			if (iCharsToGo <= 0) {
-				break;
-			}
-		}
-	}
-/* Split the list */
-	if (tTextLen == 0) {
-		/* Empty text blocks list */
-		pFootAnchor = pTextAnchor;
-		pTextAnchor = NULL;
-	} else if (pCurr == NULL) {
-		/* No footnote blocks */
-		pFootAnchor = NULL;
-	} else if (iCharsToGo == 0) {
-		/* Move the integral number of footnote blocks */
-		pFootAnchor = pCurr->pNext;
-		pCurr->pNext = NULL;
-	} else {
-		/* Split the part-text block, part-footnote block */
-		DBG_DEC(iBytesTooFar);
-		fail(iBytesTooFar <= 0);
-		pFootAnchor = xmalloc(sizeof(list_mem_type));
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		pFootAnchor->tInfo.lFileOffset =
-				pCurr->tInfo.lFileOffset +
-				(long)pCurr->tInfo.tLength -
-				iBytesTooFar;
-		DBG_HEX(pFootAnchor->tInfo.lFileOffset);
-		DBG_HEX(pCurr->tInfo.lTextOffset);
-		pFootAnchor->tInfo.lTextOffset =
-				pCurr->tInfo.lTextOffset +
-				(long)pCurr->tInfo.tLength -
-				iBytesTooFar;
-		DBG_HEX(pFootAnchor->tInfo.lTextOffset);
-		pFootAnchor->tInfo.tLength = (size_t)iBytesTooFar;
-		pCurr->tInfo.tLength -= (size_t)iBytesTooFar;
-		pFootAnchor->tInfo.bUsesUnicode = pCurr->tInfo.bUsesUnicode;
-		/* Move the integral number of footnote blocks */
-		pFootAnchor->pNext = pCurr->pNext;
-		pCurr->pNext = NULL;
-	}
-/* Footnote block list */
-	pCurr = NULL;
-	iCharsToGo = (int)tFootnoteLen;
-	iBytesTooFar = -1;
-	if (tFootnoteLen != 0) {
-		DBG_MSG("Footnote block list");
-		DBG_DEC(tFootnoteLen);
-		for (pCurr = pFootAnchor;
-		     pCurr != NULL;
-		     pCurr = pCurr->pNext) {
-			DBG_DEC(pCurr->tInfo.tLength);
-			fail(pCurr->tInfo.tLength == 0);
-			if (pCurr->tInfo.bUsesUnicode) {
-				fail(odd(pCurr->tInfo.tLength));
-				iCharsToGo -= (int)(pCurr->tInfo.tLength / 2);
-				if (iCharsToGo < 0) {
-					iBytesTooFar = -2 * iCharsToGo;
-				}
-			} else {
-				iCharsToGo -= (int)pCurr->tInfo.tLength;
-				if (iCharsToGo < 0) {
-					iBytesTooFar = -iCharsToGo;
-				}
-			}
-			if (iCharsToGo <= 0) {
-				break;
-			}
-		}
-	}
-/* Split the list */
-	if (tFootnoteLen == 0) {
-		/* Empty footnote list */
-		pUnused1Anchor = pFootAnchor;
-		pFootAnchor = NULL;
-	} else if (pCurr == NULL) {
-		/* No unused1 blocks */
-		pUnused1Anchor = NULL;
-	} else if (iCharsToGo == 0) {
-		/* Move the integral number of unused1-list blocks */
-		pUnused1Anchor = pCurr->pNext;
-		pCurr->pNext = NULL;
-	} else {
-	  	/* Split the part-footnote block, part-unused1 block */
-		DBG_DEC(iBytesTooFar);
-		fail(iBytesTooFar <= 0);
-		pUnused1Anchor = xmalloc(sizeof(list_mem_type));
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		pUnused1Anchor->tInfo.lFileOffset =
-				pCurr->tInfo.lFileOffset +
-				(long)pCurr->tInfo.tLength -
-				iBytesTooFar;
-		DBG_HEX(pUnused1Anchor->tInfo.lFileOffset);
-		DBG_HEX(pCurr->tInfo.lTextOffset);
-		pUnused1Anchor->tInfo.lTextOffset =
-				pCurr->tInfo.lTextOffset +
-				(long)pCurr->tInfo.tLength -
-				iBytesTooFar;
-		DBG_HEX(pUnused1Anchor->tInfo.lTextOffset);
-		pUnused1Anchor->tInfo.tLength = (size_t)iBytesTooFar;
-		pCurr->tInfo.tLength -= (size_t)iBytesTooFar;
-		pUnused1Anchor->tInfo.bUsesUnicode =
-				pCurr->tInfo.bUsesUnicode;
-		/* Move the integral number of unused1 blocks */
-		pUnused1Anchor->pNext = pCurr->pNext;
-		pCurr->pNext = NULL;
-	}
-/* Unused1 block list */
-	pCurr = NULL;
-	iCharsToGo = (int)tUnused1Len;
-	iBytesTooFar = -1;
-	if (tUnused1Len != 0) {
-		DBG_MSG("Unused1 block list");
-		DBG_DEC(tUnused1Len);
-		for (pCurr = pUnused1Anchor;
-		     pCurr != NULL;
-		     pCurr = pCurr->pNext) {
-			DBG_DEC(pCurr->tInfo.tLength);
-			fail(pCurr->tInfo.tLength == 0);
-			if (pCurr->tInfo.bUsesUnicode) {
-				fail(odd(pCurr->tInfo.tLength));
-				iCharsToGo -= (int)(pCurr->tInfo.tLength / 2);
-				if (iCharsToGo < 0) {
-					iBytesTooFar = -2 * iCharsToGo;
-				}
-			} else {
-				iCharsToGo -= (int)pCurr->tInfo.tLength;
-				if (iCharsToGo < 0) {
-					iBytesTooFar = -iCharsToGo;
-				}
-			}
-			if (iCharsToGo <= 0) {
-				break;
-			}
-		}
-	}
-/* Split the list */
-	if (tUnused1Len == 0) {
-		/* Empty unused1 list */
-		pEndAnchor = pUnused1Anchor;
-		pUnused1Anchor = NULL;
-	} else if (pCurr == NULL) {
-		/* No endnote blocks */
-		pEndAnchor = NULL;
-	} else if (iCharsToGo == 0) {
-		/* Move the intergral number of endnote blocks */
-		pEndAnchor = pCurr->pNext;
-		pCurr->pNext = NULL;
-	} else {
-		/* Split the part-unused1-list block, part-endnote block */
-		DBG_DEC(iBytesTooFar);
-		fail(iBytesTooFar <= 0);
-		pEndAnchor = xmalloc(sizeof(list_mem_type));
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		pEndAnchor->tInfo.lFileOffset =
-				pCurr->tInfo.lFileOffset +
-				(long)pCurr->tInfo.tLength -
-				iBytesTooFar;
-		DBG_HEX(pEndAnchor->tInfo.lFileOffset);
-		DBG_HEX(pCurr->tInfo.lTextOffset);
-		pEndAnchor->tInfo.lTextOffset =
-				pCurr->tInfo.lTextOffset +
-				(long)pCurr->tInfo.tLength -
-				iBytesTooFar;
-		DBG_HEX(pEndAnchor->tInfo.lTextOffset);
-		pEndAnchor->tInfo.tLength = (size_t)iBytesTooFar;
-		pCurr->tInfo.tLength -= (size_t)iBytesTooFar;
-		pEndAnchor->tInfo.bUsesUnicode = pCurr->tInfo.bUsesUnicode;
-		/* Move the integral number of endnote blocks */
-		pEndAnchor->pNext = pCurr->pNext;
-		pCurr->pNext = NULL;
-	}
-/* Endnote block list */
-	pCurr = NULL;
-	iCharsToGo = (int)tEndnoteLen;
-	iBytesTooFar = -1;
-	if (tEndnoteLen != 0) {
-		DBG_MSG("Endnote block list");
-		DBG_DEC(tEndnoteLen);
-		for (pCurr = pEndAnchor;
-		     pCurr != NULL;
-		     pCurr = pCurr->pNext) {
-			DBG_DEC(pCurr->tInfo.tLength);
-			fail(pCurr->tInfo.tLength == 0);
-			if (pCurr->tInfo.bUsesUnicode) {
-				fail(odd(pCurr->tInfo.tLength));
-				iCharsToGo -= (int)(pCurr->tInfo.tLength / 2);
-				if (iCharsToGo <= 0) {
-					iBytesTooFar = -2 * iCharsToGo;
-				}
-			} else {
-				iCharsToGo -= (int)pCurr->tInfo.tLength;
-				if (iCharsToGo <= 0) {
-					iBytesTooFar = -iCharsToGo;
-				}
-			}
-			if (iCharsToGo <= 0) {
-				break;
-			}
-		}
-	}
-/* Split the list */
-	if (tEndnoteLen == 0) {
-		/* Empty endnote list */
-		pUnused2Anchor = pEndAnchor;
-		pEndAnchor = NULL;
-	} else if (pCurr == NULL) {
-		/* No unused2 blocks */
-		pUnused2Anchor = NULL;
-	} else if (iCharsToGo == 0) {
-		/* Move the intergral number of unused2 blocks */
-		pUnused2Anchor = pCurr->pNext;
-		pCurr->pNext = NULL;
-	} else {
-		/* Split the part-endnote block, part-unused2 block */
-		DBG_DEC(iBytesTooFar);
-		fail(iBytesTooFar <= 0);
-		pUnused2Anchor = xmalloc(sizeof(list_mem_type));
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		pUnused2Anchor->tInfo.lFileOffset =
-				pCurr->tInfo.lFileOffset +
-				(long)pCurr->tInfo.tLength -
-				iBytesTooFar;
-		DBG_HEX(pUnused2Anchor->tInfo.lFileOffset);
-		DBG_HEX(pCurr->tInfo.lTextOffset);
-		pUnused2Anchor->tInfo.lTextOffset =
-				pCurr->tInfo.lTextOffset +
-				(long)pCurr->tInfo.tLength -
-				iBytesTooFar;
-		DBG_HEX(pUnused2Anchor->tInfo.lTextOffset);
-		pUnused2Anchor->tInfo.tLength = (size_t)iBytesTooFar;
-		pCurr->tInfo.tLength -= (size_t)iBytesTooFar;
-		pUnused2Anchor->tInfo.bUsesUnicode =
-				pCurr->tInfo.bUsesUnicode;
-		/* Move the integral number of unused2 blocks */
-		pUnused2Anchor->pNext = pCurr->pNext;
-		pCurr->pNext = NULL;
-	}
-/* Unused2 block list */
-	pCurr = NULL;
-	iCharsToGo = (int)tUnused2Len;
-	iBytesTooFar = -1;
-	if (tUnused2Len != 0) {
-		DBG_MSG("Unused2 block list");
-		DBG_DEC(tUnused2Len);
-		for (pCurr = pUnused2Anchor;
-		     pCurr != NULL;
-		     pCurr = pCurr->pNext) {
-			DBG_DEC(pCurr->tInfo.tLength);
-			fail(pCurr->tInfo.tLength == 0);
-			if (pCurr->tInfo.bUsesUnicode) {
-				fail(odd(pCurr->tInfo.tLength));
-				iCharsToGo -= (int)(pCurr->tInfo.tLength / 2);
-				if (iCharsToGo < 0) {
-					iBytesTooFar = -2 * iCharsToGo;
-				}
-			} else {
-				iCharsToGo -= (int)pCurr->tInfo.tLength;
-				if (iCharsToGo < 0) {
-					iBytesTooFar = -iCharsToGo;
-				}
-			}
-			if (iCharsToGo <= 0) {
-				break;
-			}
-		}
-	}
-/* Split the list */
-	if (tUnused2Len == 0) {
-		/* Empty unused2 list */
-		pGarbageAnchor = pUnused2Anchor;
-		pUnused2Anchor = NULL;
-	} else if (pCurr == NULL) {
-		/* No garbage block list */
-		pGarbageAnchor = NULL;
-	} else if (iCharsToGo == 0) {
-		/* Move the intergral number of garbage blocks */
-		pGarbageAnchor = pCurr->pNext;
-	} else {
-		/* Reduce the part-endnote block */
-		DBG_DEC(iBytesTooFar);
-		fail(iBytesTooFar <= 0);
-		pCurr->tInfo.tLength -= (size_t)iBytesTooFar;
-		/* Move the integral number of garbage blocks */
-		pGarbageAnchor = pCurr->pNext;
-		pCurr->pNext = NULL;
-	}
-/* Free the garbage block list, this should never be needed */
-	pCurr = pGarbageAnchor;
-	while (pCurr != NULL) {
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		DBG_DEC(pCurr->tInfo.tLength);
-		pNext = pCurr->pNext;
-		pCurr = xfree(pCurr);
-		pCurr = pNext;
-	}
+	pGarbageAnchor = NULL;
+
+	DBG_MSG_C(ulTextLen != 0, "Text block list");
+	vSpitList(&pTextAnchor, &pFootAnchor, ulTextLen);
+	DBG_MSG_C(ulFootnoteLen != 0, "Footnote block list");
+	vSpitList(&pFootAnchor, &pHdrFtrAnchor, ulFootnoteLen);
+	DBG_MSG_C(ulHdrFtrLen != 0, "Header/Footer block list");
+	vSpitList(&pHdrFtrAnchor, &pMacroAnchor, ulHdrFtrLen);
+	DBG_MSG_C(ulMacroLen != 0, "Macro block list");
+	vSpitList(&pMacroAnchor, &pAnnotationAnchor, ulMacroLen);
+	DBG_MSG_C(ulAnnotationLen != 0, "Annotation block list");
+	vSpitList(&pAnnotationAnchor, &pEndAnchor, ulAnnotationLen);
+	DBG_MSG_C(ulEndnoteLen != 0, "Endnote block list");
+	vSpitList(&pEndAnchor, &pTextBoxAnchor, ulEndnoteLen);
+	DBG_MSG_C(ulTextBoxLen != 0, "Textbox block list");
+	vSpitList(&pTextBoxAnchor, &pHdrTextBoxAnchor, ulTextBoxLen);
+	DBG_MSG_C(ulHdrTextBoxLen != 0, "HeaderTextbox block list");
+	vSpitList(&pHdrTextBoxAnchor, &pGarbageAnchor, ulHdrTextBoxLen);
+
+	/* Free the garbage block list, this should not be needed */
+	DBG_DEC_C(pGarbageAnchor != NULL, pGarbageAnchor->tInfo.ulLength);
+	pGarbageAnchor = pFreeOneList(pGarbageAnchor);
 
 #if defined(DEBUG)
-	/* Check the number of bytes in the block lists */
-	tTotal = 0;
-	for (pCurr = pTextAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		NO_DBG_HEX(pCurr->tInfo.lFileOffset);
-		NO_DBG_HEX(pCurr->tInfo.lTextOffset);
-		NO_DBG_DEC(pCurr->tInfo.tLength);
-		fail(pCurr->tInfo.tLength == 0);
-		if (pCurr->tInfo.bUsesUnicode) {
-			fail(odd(pCurr->tInfo.tLength));
-			tTotal += pCurr->tInfo.tLength / 2;
-		} else {
-			tTotal += pCurr->tInfo.tLength;
-		}
-	}
-	DBG_DEC(tTotal);
-	if (tTotal != tTextLen) {
-		DBG_DEC(tTextLen);
-		werr(1, "Software error (Text)");
-	}
-	tTotal = 0;
-	for (pCurr = pFootAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		NO_DBG_HEX(pCurr->tInfo.lTextOffset);
-		DBG_DEC(pCurr->tInfo.tLength);
-		fail(pCurr->tInfo.tLength == 0);
-		if (pCurr->tInfo.bUsesUnicode) {
-			fail(odd(pCurr->tInfo.tLength));
-			tTotal += pCurr->tInfo.tLength / 2;
-		} else {
-			tTotal += pCurr->tInfo.tLength;
-		}
-	}
-	DBG_DEC(tTotal);
-	if (tTotal != tFootnoteLen) {
-		DBG_DEC(tFootnoteLen);
-		werr(1, "Software error (Footnotes)");
-	}
-	tTotal = 0;
-	for (pCurr = pUnused1Anchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		NO_DBG_HEX(pCurr->tInfo.lTextOffset);
-		DBG_DEC(pCurr->tInfo.tLength);
-		fail(pCurr->tInfo.tLength == 0);
-		if (pCurr->tInfo.bUsesUnicode) {
-			fail(odd(pCurr->tInfo.tLength));
-			tTotal += pCurr->tInfo.tLength / 2;
-		} else {
-			tTotal += pCurr->tInfo.tLength;
-		}
-	}
-	DBG_DEC(tTotal);
-	if (tTotal != tUnused1Len) {
-		DBG_DEC(tUnused1Len);
-		werr(1, "Software error (Unused1-list)");
-	}
-	tTotal = 0;
-	for (pCurr = pEndAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		NO_DBG_HEX(pCurr->tInfo.lTextOffset);
-		DBG_DEC(pCurr->tInfo.tLength);
-		fail(pCurr->tInfo.tLength == 0);
-		if (pCurr->tInfo.bUsesUnicode) {
-			fail(odd(pCurr->tInfo.tLength));
-			tTotal += pCurr->tInfo.tLength / 2;
-		} else {
-			tTotal += pCurr->tInfo.tLength;
-		}
-	}
-	DBG_DEC(tTotal);
-	if (tTotal != tEndnoteLen) {
-		DBG_DEC(tEndnoteLen);
-		werr(1, "Software error (Endnotes)");
-	}
-	tTotal = 0;
-	for (pCurr = pUnused2Anchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		DBG_HEX(pCurr->tInfo.lFileOffset);
-		NO_DBG_HEX(pCurr->tInfo.lTextOffset);
-		DBG_DEC(pCurr->tInfo.tLength);
-		fail(pCurr->tInfo.tLength == 0);
-		if (pCurr->tInfo.bUsesUnicode) {
-			fail(odd(pCurr->tInfo.tLength));
-			tTotal += pCurr->tInfo.tLength / 2;
-		} else {
-			tTotal += pCurr->tInfo.tLength;
-		}
-	}
-	DBG_DEC(tTotal);
-	if (tTotal != tUnused2Len) {
-		DBG_DEC(tUnused2Len);
-		werr(1, "Software error (Unused2-list)");
-	}
+	vCheckList(pTextAnchor, ulTextLen, "Software error (Text)");
+	vCheckList(pFootAnchor, ulFootnoteLen, "Software error (Footnote)");
+	vCheckList(pHdrFtrAnchor, ulHdrFtrLen, "Software error (Hdr/Ftr)");
+	vCheckList(pMacroAnchor, ulMacroLen, "Software error (Macro)");
+	vCheckList(pAnnotationAnchor, ulAnnotationLen,
+						"Software error (Annotation)");
+	vCheckList(pEndAnchor, ulEndnoteLen, "Software error (Endnote)");
+	vCheckList(pTextBoxAnchor, ulTextBoxLen, "Software error (TextBox)");
+	vCheckList(pHdrTextBoxAnchor, ulHdrTextBoxLen,
+						"Software error (HdrTextBox)");
 #endif /* DEBUG */
+
+	/* Remove the list if the text box is empty */
+	if (bIsEmptyBox(pFile, pTextBoxAnchor)) {
+		pTextBoxAnchor = pFreeOneList(pTextBoxAnchor);
+	}
+	if (bIsEmptyBox(pFile, pHdrTextBoxAnchor)) {
+		pHdrTextBoxAnchor = pFreeOneList(pHdrTextBoxAnchor);
+	}
 
 	if (!bMustExtend) {
 		return;
@@ -578,23 +388,27 @@ vSplitBlockList(size_t tTextLen, size_t tFootnoteLen, size_t tUnused1Len,
 
 	apAnchors[0] = pTextAnchor;
 	apAnchors[1] = pFootAnchor;
-	apAnchors[2] = pUnused1Anchor;
-	apAnchors[3] = pEndAnchor;
-	apAnchors[4] = pUnused2Anchor;
+	apAnchors[2] = pHdrFtrAnchor;
+	apAnchors[3] = pMacroAnchor;
+	apAnchors[4] = pAnnotationAnchor;
+	apAnchors[5] = pEndAnchor;
+	apAnchors[6] = pTextBoxAnchor;
+	apAnchors[7] = pHdrTextBoxAnchor;
 
-	for (iIndex = 0; iIndex < 5; iIndex++) {
-		for (pCurr = apAnchors[iIndex];
+	for (tIndex = 0; tIndex < elementsof(apAnchors); tIndex++) {
+		for (pCurr = apAnchors[tIndex];
 		     pCurr != NULL;
 		     pCurr = pCurr->pNext) {
 			if (pCurr->pNext != NULL &&
-			    pCurr->tInfo.tLength % BIG_BLOCK_SIZE != 0) {
-				DBG_HEX(pCurr->tInfo.lFileOffset);
-				DBG_HEX(pCurr->tInfo.lTextOffset);
-				DBG_DEC(pCurr->tInfo.tLength);
-				pCurr->tInfo.tLength /= BIG_BLOCK_SIZE;
-				pCurr->tInfo.tLength++;
-				pCurr->tInfo.tLength *= BIG_BLOCK_SIZE;
-				DBG_DEC(pCurr->tInfo.tLength);
+			    pCurr->tInfo.ulLength % BIG_BLOCK_SIZE != 0) {
+				DBG_DEC(tIndex);
+				DBG_HEX(pCurr->tInfo.ulFileOffset);
+				DBG_HEX(pCurr->tInfo.ulCharPos);
+				DBG_DEC(pCurr->tInfo.ulLength);
+				pCurr->tInfo.ulLength /= BIG_BLOCK_SIZE;
+				pCurr->tInfo.ulLength++;
+				pCurr->tInfo.ulLength *= BIG_BLOCK_SIZE;
+				DBG_DEC(pCurr->tInfo.ulLength);
 			}
 		}
 	}
@@ -602,383 +416,267 @@ vSplitBlockList(size_t tTextLen, size_t tFootnoteLen, size_t tUnused1Len,
 
 #if defined(__riscos)
 /*
- * tGetDocumentLength - get the combined character length of the three lists
+ * ulGetDocumentLength - get the total character length of the printable lists
  *
  * returns: The total number of characters
  */
-size_t
-tGetDocumentLength(void)
+ULONG
+ulGetDocumentLength(void)
 {
-	list_mem_type	*apAnchors[3];
-	list_mem_type	*pCurr;
-	size_t		tTotal;
-	int		iIndex;
+	long		ulTotal;
 
-	DBG_MSG("uiGetDocumentLength");
+	DBG_MSG("ulGetDocumentLength");
 
-	apAnchors[0] = pTextAnchor;
-	apAnchors[1] = pFootAnchor;
-	apAnchors[2] = pEndAnchor;
-
-	tTotal = 0;
-	for (iIndex = 0; iIndex < 3; iIndex++) {
-		for (pCurr = apAnchors[iIndex];
-		     pCurr != NULL;
-		     pCurr = pCurr->pNext) {
-			fail(pCurr->tInfo.tLength == 0);
-			if (pCurr->tInfo.bUsesUnicode) {
-				fail(odd(pCurr->tInfo.tLength));
-				tTotal += pCurr->tInfo.tLength / 2;
-			} else {
-				tTotal += pCurr->tInfo.tLength;
-			}
-		}
-	}
-	DBG_DEC(tTotal);
-	return tTotal;
-} /* end of tGetDocumentLength */
+	ulTotal = ulComputeListLength(pTextAnchor);
+	ulTotal += ulComputeListLength(pFootAnchor);
+	ulTotal += ulComputeListLength(pEndAnchor);
+	ulTotal += ulComputeListLength(pTextBoxAnchor);
+	ulTotal += ulComputeListLength(pHdrTextBoxAnchor);
+	DBG_DEC(ulTotal);
+	return ulTotal;
+} /* end of ulGetDocumentLength */
 #endif /* __riscos */
 
 /*
- * usNextTextByte - get the next byte from the text block list
+ * bExistsTextBox - is there a text box?
  */
-static unsigned short
-usNextTextByte(FILE *pFile, long *plOffset)
+BOOL
+bExistsTextBox(void)
 {
+	return pTextBoxAnchor != NULL &&
+		pTextBoxAnchor->tInfo.ulLength != 0;
+} /* end of bExistsTextBox */
+
+/*
+ * bExistsHdrTextBox - is there a header text box?
+ */
+BOOL
+bExistsHdrTextBox(void)
+{
+	return pHdrTextBoxAnchor != NULL &&
+		pHdrTextBoxAnchor->tInfo.ulLength != 0;
+} /* end of bExistsHdrTextBox */
+/*
+ * usGetNextByte - get the next byte from the specified block list
+ */
+static USHORT
+usGetNextByte(FILE *pFile, list_mem_type *pAnchor,
+	ULONG *pulFileOffset, ULONG *pulCharPos, USHORT *pusPropMod)
+{
+	static ULONG	ulBlockOffset = 0;
 	static size_t	tByteNext = 0;
-	static size_t	tBlockOffset = 0;
-	long	lReadOff;
+	ULONG	ulReadOff;
 	size_t	tReadLen;
 
-	if (pTextBlockCurrent == NULL ||
+	if (pBlockCurrent == NULL ||
 	    tByteNext >= sizeof(aucBlock) ||
-	    tBlockOffset + tByteNext >= pTextBlockCurrent->tInfo.tLength) {
-		if (pTextBlockCurrent == NULL) {
+	    ulBlockOffset + tByteNext >= pBlockCurrent->tInfo.ulLength) {
+		if (pBlockCurrent == NULL) {
 			/* First block, first part */
-			pTextBlockCurrent = pTextAnchor;
-			tBlockOffset = 0;
-		} else if (tBlockOffset + sizeof(aucBlock) <
-				pTextBlockCurrent->tInfo.tLength) {
+			pBlockCurrent = pAnchor;
+			ulBlockOffset = 0;
+		} else if (ulBlockOffset + sizeof(aucBlock) <
+				pBlockCurrent->tInfo.ulLength) {
 			/* Same block, next part */
-			tBlockOffset += sizeof(aucBlock);
+			ulBlockOffset += sizeof(aucBlock);
 		} else {
 			/* Next block, first part */
-			pTextBlockCurrent = pTextBlockCurrent->pNext;
-			tBlockOffset = 0;
+			pBlockCurrent = pBlockCurrent->pNext;
+			ulBlockOffset = 0;
 		}
-		if (pTextBlockCurrent == NULL) {
+		if (pBlockCurrent == NULL) {
 			/* Past the last part of the last block */
-			return (unsigned short)EOF;
+			return (USHORT)EOF;
 		}
-		tReadLen = pTextBlockCurrent->tInfo.tLength - tBlockOffset;
+		tReadLen = (size_t)
+			(pBlockCurrent->tInfo.ulLength - ulBlockOffset);
 		if (tReadLen > sizeof(aucBlock)) {
 			tReadLen = sizeof(aucBlock);
 		}
-		lReadOff = pTextBlockCurrent->tInfo.lFileOffset +
-				(long)tBlockOffset;
-		if (!bReadBytes(aucBlock, tReadLen, lReadOff, pFile)) {
-			return (unsigned short)EOF;
+		ulReadOff = pBlockCurrent->tInfo.ulFileOffset +
+				ulBlockOffset;
+		if (!bReadBytes(aucBlock, tReadLen, ulReadOff, pFile)) {
+			/* Don't read from this list any longer */
+			pBlockCurrent = NULL;
+			return (USHORT)EOF;
 		}
 		tByteNext = 0;
 	}
-	if (plOffset != NULL) {
-		*plOffset = pTextBlockCurrent->tInfo.lFileOffset +
-			(long)tBlockOffset +
-			(long)tByteNext;
+	if (pulFileOffset != NULL) {
+		*pulFileOffset = pBlockCurrent->tInfo.ulFileOffset +
+			ulBlockOffset + tByteNext;
 	}
-	return aucBlock[tByteNext++];
-} /* end of usNextTextByte */
+	if (pulCharPos != NULL) {
+		*pulCharPos = pBlockCurrent->tInfo.ulCharPos +
+			ulBlockOffset + tByteNext;
+	}
+	if (pusPropMod != NULL) {
+		*pusPropMod = pBlockCurrent->tInfo.usPropMod;
+	}
+	return (USHORT)aucBlock[tByteNext++];
+} /* end of usGetNextByte */
 
 /*
- * usNextFootByte - get the next byte from the footnote block list
+ * usGetNextChar - get the next character from the specified block list
  */
-static unsigned short
-usNextFootByte(FILE *pFile, long *plOffset)
+static USHORT
+usGetNextChar(FILE *pFile, list_mem_type *pAnchor,
+	ULONG *pulFileOffset, ULONG *pulCharPos, USHORT *pusPropMod)
 {
-	static size_t	tByteNext = 0;
-	static size_t	tBlockOffset = 0;
-	long	lReadOff;
-	size_t	tReadLen;
+	USHORT	usLSB, usMSB;
 
-	if (pFootBlockCurrent == NULL ||
-	    tByteNext >= sizeof(aucBlock) ||
-	    tBlockOffset + tByteNext >= pFootBlockCurrent->tInfo.tLength) {
-		if (pFootBlockCurrent == NULL) {
-			/* First block, first part */
-			pFootBlockCurrent = pFootAnchor;
-			tBlockOffset = 0;
-		} else if (tBlockOffset + sizeof(aucBlock) <
-				pFootBlockCurrent->tInfo.tLength) {
-			/* Same block, next part */
-			tBlockOffset += sizeof(aucBlock);
-		} else {
-			/* Next block, first part */
-			pFootBlockCurrent = pFootBlockCurrent->pNext;
-			tBlockOffset = 0;
-		}
-		if (pFootBlockCurrent == NULL) {
-			/* Past the last part of the last block */
-			return (unsigned short)EOF;
-		}
-		tReadLen = pFootBlockCurrent->tInfo.tLength - tBlockOffset;
-		if (tReadLen > sizeof(aucBlock)) {
-			tReadLen = sizeof(aucBlock);
-		}
-		lReadOff = pFootBlockCurrent->tInfo.lFileOffset +
-				(long)tBlockOffset;
-		if (!bReadBytes(aucBlock, tReadLen, lReadOff, pFile)) {
-			return (unsigned short)EOF;
-		}
-		tByteNext = 0;
+	usLSB = usGetNextByte(pFile, pAnchor,
+			pulFileOffset, pulCharPos, pusPropMod);
+	if (usLSB == (USHORT)EOF) {
+		return (USHORT)EOF;
 	}
-	if (plOffset != NULL) {
-		*plOffset = pFootBlockCurrent->tInfo.lFileOffset +
-			(long)tBlockOffset +
-			(long)tByteNext;
-	}
-	return aucBlock[tByteNext++];
-} /* end of usNextFootByte */
-
-/*
- * usNextEndByte - get the next byte from the endnote block list
- */
-static unsigned short
-usNextEndByte(FILE *pFile, long *plOffset)
-{
-	static size_t	tByteNext = 0;
-	static size_t	tBlockOffset = 0;
-	long	lReadOff;
-	size_t	tReadLen;
-
-	if (pEndBlockCurrent == NULL ||
-	    tByteNext >= sizeof(aucBlock) ||
-	    tBlockOffset + tByteNext >= pEndBlockCurrent->tInfo.tLength) {
-		if (pEndBlockCurrent == NULL) {
-			/* First block, first part */
-			pEndBlockCurrent = pEndAnchor;
-			tBlockOffset = 0;
-		} else if (tBlockOffset + sizeof(aucBlock) <
-				pEndBlockCurrent->tInfo.tLength) {
-			/* Same block, next part */
-			tBlockOffset += sizeof(aucBlock);
-		} else {
-			/* Next block, first part */
-			pEndBlockCurrent = pEndBlockCurrent->pNext;
-			tBlockOffset = 0;
-		}
-		if (pEndBlockCurrent == NULL) {
-			/* Past the last part of the last block */
-			return (unsigned short)EOF;
-		}
-		tReadLen = pEndBlockCurrent->tInfo.tLength - tBlockOffset;
-		if (tReadLen > sizeof(aucBlock)) {
-			tReadLen = sizeof(aucBlock);
-		}
-		lReadOff = pEndBlockCurrent->tInfo.lFileOffset +
-				(long)tBlockOffset;
-		if (!bReadBytes(aucBlock, tReadLen, lReadOff, pFile)) {
-			return (unsigned short)EOF;
-		}
-		tByteNext = 0;
-	}
-	if (plOffset != NULL) {
-		*plOffset = pEndBlockCurrent->tInfo.lFileOffset +
-			(long)tBlockOffset +
-			(long)tByteNext;
-	}
-	return aucBlock[tByteNext++];
-} /* end of usNextEndByte */
-
-/*
- * usNextTextChar - get the next character from the text block list
- */
-static unsigned short
-usNextTextChar(FILE *pFile, long *plOffset)
-{
-	unsigned short	usLSB, usMSB;
-
-	usLSB = usNextTextByte(pFile, plOffset);
-	if (usLSB == (unsigned short)EOF) {
-		return (unsigned short)EOF;
-	}
-	if (pTextBlockCurrent->tInfo.bUsesUnicode) {
-		usMSB = usNextTextByte(pFile, NULL);
+	if (pBlockCurrent->tInfo.bUsesUnicode) {
+		usMSB = usGetNextByte(pFile, pAnchor,
+				NULL, NULL, NULL);
 	} else {
 		usMSB = 0x00;
 	}
-	if (usMSB == (unsigned short)EOF) {
-		DBG_MSG("usNextTextChar: Unexpected EOF");
-		DBG_HEX_C(plOffset != NULL, *plOffset);
-		return (unsigned short)EOF;
+	if (usMSB == (USHORT)EOF) {
+		DBG_MSG("usGetNextChar: Unexpected EOF");
+		DBG_HEX_C(pulFileOffset != NULL, *pulFileOffset);
+		DBG_HEX_C(pulCharPos != NULL, *pulCharPos);
+		return (USHORT)EOF;
 	}
 	return (usMSB << 8) | usLSB;
-} /* end of usNextTextChar */
-
-/*
- * usNextFootChar - get the next character from the footnote block list
- */
-static unsigned short
-usNextFootChar(FILE *pFile, long *plOffset)
-{
-	unsigned short	usLSB, usMSB;
-
-	usLSB = usNextFootByte(pFile, plOffset);
-	if (usLSB == (unsigned short)EOF) {
-		return (unsigned short)EOF;
-	}
-	if (pFootBlockCurrent->tInfo.bUsesUnicode) {
-		usMSB = usNextFootByte(pFile, NULL);
-	} else {
-		usMSB = 0x00;
-	}
-	if (usMSB == (unsigned short)EOF) {
-		DBG_MSG("usNextFootChar: Unexpected EOF");
-		DBG_HEX_C(plOffset != NULL, *plOffset);
-		return (unsigned short)EOF;
-	}
-	return (usMSB << 8) | usLSB;
-} /* end of usNextFootChar */
-
-/*
- * usNextEndChar - get the next character from the endnote block list
- */
-static unsigned short
-usNextEndChar(FILE *pFile, long *plOffset)
-{
-	unsigned short	usLSB, usMSB;
-
-	usLSB = usNextEndByte(pFile, plOffset);
-	if (usLSB == (unsigned short)EOF) {
-		return (unsigned short)EOF;
-	}
-	if (pEndBlockCurrent->tInfo.bUsesUnicode) {
-		usMSB = usNextEndByte(pFile, NULL);
-	} else {
-		usMSB = 0x00;
-	}
-	if (usMSB == (unsigned short)EOF) {
-		DBG_MSG("usNextEndChar: Unexpected EOF");
-		DBG_HEX_C(plOffset != NULL, *plOffset);
-		return (unsigned short)EOF;
-	}
-	return (usMSB << 8) | usLSB;
-} /* end of usNextEndChar */
+} /* end of usGetNextChar */
 
 /*
  * usNextChar - get the next character from the given block list
  */
-unsigned short
-usNextChar(FILE *pFile, list_id_enum eListID, long *plOffset)
+USHORT
+usNextChar(FILE *pFile, list_id_enum eListID,
+	ULONG *pulFileOffset, ULONG *pulCharPos, USHORT *pusPropMod)
 {
+	USHORT	usRetVal;
+
 	fail(pFile == NULL);
 
 	switch (eListID) {
 	case text_list:
-		return usNextTextChar(pFile, plOffset);
+		usRetVal = usGetNextChar(pFile, pTextAnchor,
+				pulFileOffset, pulCharPos, pusPropMod);
+		break;
 	case footnote_list:
-		return usNextFootChar(pFile, plOffset);
+		usRetVal = usGetNextChar(pFile, pFootAnchor,
+				pulFileOffset, pulCharPos, pusPropMod);
+		break;
 	case endnote_list:
-		return usNextEndChar(pFile, plOffset);
+		usRetVal = usGetNextChar(pFile, pEndAnchor,
+				pulFileOffset, pulCharPos, pusPropMod);
+		break;
+	case textbox_list:
+		usRetVal = usGetNextChar(pFile, pTextBoxAnchor,
+				pulFileOffset, pulCharPos, pusPropMod);
+		break;
+	case hdrtextbox_list:
+		usRetVal = usGetNextChar(pFile, pHdrTextBoxAnchor,
+				pulFileOffset, pulCharPos, pusPropMod);
+		break;
 	default:
-		if (plOffset != NULL) {
-			*plOffset = -1;
-		}
-		return (unsigned short)EOF;
+		DBG_DEC(eListID);
+		usRetVal = (USHORT)EOF;
+		break;
 	}
+
+	if (usRetVal == (USHORT)EOF) {
+		if (pulFileOffset != NULL) {
+			*pulFileOffset = FC_INVALID;
+		}
+		if (pulCharPos != NULL) {
+			*pulCharPos = CP_INVALID;
+		}
+		if (pusPropMod != NULL) {
+			*pusPropMod = IGNORE_PROPMOD;
+		}
+	}
+	return usRetVal;
 } /* end of usNextChar */
 
 /*
- * Translate the start from the begin of the text to an offset in the file.
+ * Translate a character position to an offset in the file.
+ * Logical to physical offset.
  *
- * Returns:	 -1: in case of error
- *		>=0: the computed file offset
+ * Returns:	FC_INVALID: in case of error
+ *		otherwise: the computed file offset
  */
-long
-lTextOffset2FileOffset(long lTextOffset)
+ULONG
+ulCharPos2FileOffset(ULONG ulCharPos)
 {
 	list_mem_type	*apAnchors[5];
 	list_mem_type	*pCurr;
-	int		iIndex;
-	BOOL		bStartOfList;
+	ULONG		ulBestGuess;
+	size_t		tIndex;
 
 	apAnchors[0] = pTextAnchor;
 	apAnchors[1] = pFootAnchor;
-	apAnchors[2] = pUnused1Anchor;
-	apAnchors[3] = pEndAnchor;
-	apAnchors[4] = pUnused2Anchor;
+	apAnchors[2] = pEndAnchor;
+	apAnchors[3] = pTextBoxAnchor;
+	apAnchors[4] = pHdrTextBoxAnchor;
 
-	bStartOfList = FALSE;
+	ulBestGuess = FC_INVALID; /* Best guess is "fileoffset not found" */
 
-	for (iIndex = 0; iIndex < 5; iIndex++) {
-		pCurr = apAnchors[iIndex];
-		while (pCurr != NULL) {
-			if (bStartOfList) {
-				NO_DBG_DEC(iIndex);
-				NO_DBG_HEX(pCurr->tInfo.lFileOffset);
-				if (iIndex >= 4) {
-					/* Past the last used byte */
-					return -1;
-				}
-				return pCurr->tInfo.lFileOffset;
+	for (tIndex = 0; tIndex < elementsof(apAnchors); tIndex++) {
+		for (pCurr = apAnchors[tIndex];
+		     pCurr != NULL;
+		     pCurr = pCurr->pNext) {
+			if (ulCharPos == pCurr->tInfo.ulCharPos +
+			     pCurr->tInfo.ulLength &&
+			    pCurr->pNext != NULL) {
+				/*
+				 * The character position is one beyond this
+				 * block, so we guess it's the first byte of
+				 * the next block (if there is a next block)
+				 */
+				ulBestGuess = pCurr->pNext->tInfo.ulFileOffset;
 			}
-			if (lTextOffset < pCurr->tInfo.lTextOffset ||
-			    lTextOffset >= pCurr->tInfo.lTextOffset +
-			     (long)pCurr->tInfo.tLength) {
-				pCurr = pCurr->pNext;
+
+			if (ulCharPos < pCurr->tInfo.ulCharPos ||
+			    ulCharPos >= pCurr->tInfo.ulCharPos +
+			     pCurr->tInfo.ulLength) {
+				/* Character position is not in this block */
 				continue;
 			}
-			switch (iIndex) {
-			case 0:
-			case 1:
-			case 3:
-			/* The textoffset is in the current block */
-				return pCurr->tInfo.lFileOffset +
-					lTextOffset -
-					pCurr->tInfo.lTextOffset;
-			case 2:
-			/* Use the start of the next non-empty list */
-				bStartOfList = TRUE;
-				break;
-			case 4:
-			/* In Unused2, means after the last used byte */
-				return -1;
-			default:
-			/* This should not happen */
-				return -1;
-			}
-			/* To the start of the next list */
-			break;
+
+			/* The character position is in the current block */
+			return pCurr->tInfo.ulFileOffset +
+				ulCharPos - pCurr->tInfo.ulCharPos;
 		}
 	}
 	/* Passed beyond the end of the last list */
-	NO_DBG_HEX(lTextOffset);
-	return -1;
-} /* end of lTextOffset2FileOffset */
+	NO_DBG_HEX(ulCharPos);
+	NO_DBG_HEX(ulBestGuess);
+	return ulBestGuess;
+} /* end of ulCharPos2FileOffset */
 
 /*
  * Get the sequence number beloning to the given file offset
  *
  * Returns the sequence number
  */
-long
-lGetSeqNumber(long lFileOffset)
+ULONG
+ulGetSeqNumber(ULONG ulFileOffset)
 {
 	list_mem_type	*pCurr;
-	long		lSeq;
+	ULONG		ulSeq;
 
-	if (lFileOffset < 0) {
-		return -1;
+	if (ulFileOffset == FC_INVALID) {
+		return FC_INVALID;
 	}
 
-	lSeq = 0;
+	ulSeq = 0;
 	for (pCurr = pTextAnchor; pCurr != NULL; pCurr = pCurr->pNext) {
-		if (lFileOffset >= pCurr->tInfo.lFileOffset &&
-		    lFileOffset < pCurr->tInfo.lFileOffset +
-		     (long)pCurr->tInfo.tLength) {
+		if (ulFileOffset >= pCurr->tInfo.ulFileOffset &&
+		    ulFileOffset < pCurr->tInfo.ulFileOffset +
+		     pCurr->tInfo.ulLength) {
 			/* The file offset is within the current textblock */
-			return lSeq + lFileOffset - pCurr->tInfo.lFileOffset;
+			return ulSeq + ulFileOffset - pCurr->tInfo.ulFileOffset;
 		}
-		lSeq += (long)pCurr->tInfo.tLength;
+		ulSeq += pCurr->tInfo.ulLength;
 	}
-	return -1;
-} /* end of lGetSeqNumber */
+	return FC_INVALID;
+} /* end of ulGetSeqNumber */

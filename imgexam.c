@@ -1,6 +1,6 @@
 /*
  * imgexam.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000-2003 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to examine image headers
@@ -109,13 +109,14 @@ bFillPaletteDIB(FILE *pFile, imagedata_type *pImg, BOOL bNewFormat)
 	fail(pFile == NULL);
 	fail(pImg == NULL);
 
-	if (pImg->iBitsPerComponent > 8) {
-		/* No palette, images uses more than 256 colors */
+	if (pImg->uiBitsPerComponent > 8) {
+		/* No palette, image uses more than 256 colors */
 		return TRUE;
 	}
 
 	if (pImg->iColorsUsed <= 0) {
-		pImg->iColorsUsed = 1 << pImg->iBitsPerComponent;
+		/* Not specified, so compute the number of colors used */
+		pImg->iColorsUsed = 1 << pImg->uiBitsPerComponent;
 	}
 
 	fail(pImg->iColorsUsed > 256);
@@ -126,9 +127,9 @@ bFillPaletteDIB(FILE *pFile, imagedata_type *pImg, BOOL bNewFormat)
 	bIsColorPalette = FALSE;
 	for (iIndex = 0; iIndex < pImg->iColorsUsed; iIndex++) {
 		/* From BGR order to RGB order */
-		pImg->aucPalette[iIndex][2] = (unsigned char)iNextByte(pFile);
-		pImg->aucPalette[iIndex][1] = (unsigned char)iNextByte(pFile);
-		pImg->aucPalette[iIndex][0] = (unsigned char)iNextByte(pFile);
+		pImg->aucPalette[iIndex][2] = (UCHAR)iNextByte(pFile);
+		pImg->aucPalette[iIndex][1] = (UCHAR)iNextByte(pFile);
+		pImg->aucPalette[iIndex][0] = (UCHAR)iNextByte(pFile);
 		if (bNewFormat) {
 			(void)iNextByte(pFile);
 		}
@@ -161,7 +162,7 @@ bExamineDIB(FILE *pFile, imagedata_type *pImg)
 		pImg->iWidth = (int)usNextWord(pFile);
 		pImg->iHeight = (int)usNextWord(pFile);
 		iPlanes = (int)usNextWord(pFile);
-		pImg->iBitsPerComponent = (int)usNextWord(pFile);
+		pImg->uiBitsPerComponent = (UINT)usNextWord(pFile);
 		iCompression = BI_RGB;
 		pImg->iColorsUsed = 0;
 		break;
@@ -170,11 +171,11 @@ bExamineDIB(FILE *pFile, imagedata_type *pImg)
 		pImg->iWidth = (int)ulNextLong(pFile);
 		pImg->iHeight = (int)ulNextLong(pFile);
 		iPlanes = (int)usNextWord(pFile);
-		pImg->iBitsPerComponent = (int)usNextWord(pFile);
+		pImg->uiBitsPerComponent = (UINT)usNextWord(pFile);
 		iCompression = (int)ulNextLong(pFile);
-		(void)iSkipBytes(pFile, 12);
+		(void)tSkipBytes(pFile, 12);
 		pImg->iColorsUsed = (int)ulNextLong(pFile);
-		(void)iSkipBytes(pFile, tHeaderSize - 36);
+		(void)tSkipBytes(pFile, tHeaderSize - 36);
 		break;
 	default:
 		DBG_DEC(tHeaderSize);
@@ -182,7 +183,7 @@ bExamineDIB(FILE *pFile, imagedata_type *pImg)
 	}
 	DBG_DEC(pImg->iWidth);
 	DBG_DEC(pImg->iHeight);
-	DBG_DEC(pImg->iBitsPerComponent);
+	DBG_DEC(pImg->uiBitsPerComponent);
 	DBG_DEC(iCompression);
 	DBG_DEC(pImg->iColorsUsed);
 
@@ -196,19 +197,19 @@ bExamineDIB(FILE *pFile, imagedata_type *pImg)
 		DBG_DEC(pImg->iHeight);
 		return FALSE;
 	}
-	if (pImg->iBitsPerComponent != 1 && pImg->iBitsPerComponent != 4 &&
-	    pImg->iBitsPerComponent != 8 && pImg->iBitsPerComponent != 24) {
-		DBG_DEC(pImg->iBitsPerComponent);
+	if (pImg->uiBitsPerComponent != 1 && pImg->uiBitsPerComponent != 4 &&
+	    pImg->uiBitsPerComponent != 8 && pImg->uiBitsPerComponent != 24) {
+		DBG_DEC(pImg->uiBitsPerComponent);
 		return FALSE;
 	}
 	if (iCompression != BI_RGB &&
-	    (pImg->iBitsPerComponent == 1 || pImg->iBitsPerComponent == 24)) {
+	    (pImg->uiBitsPerComponent == 1 || pImg->uiBitsPerComponent == 24)) {
 		return FALSE;
 	}
-	if (iCompression == BI_RLE8 && pImg->iBitsPerComponent == 4) {
+	if (iCompression == BI_RLE8 && pImg->uiBitsPerComponent == 4) {
 		return FALSE;
 	}
-	if (iCompression == BI_RLE4 && pImg->iBitsPerComponent == 8) {
+	if (iCompression == BI_RLE4 && pImg->uiBitsPerComponent == 8) {
 		return FALSE;
 	}
 
@@ -229,10 +230,10 @@ bExamineDIB(FILE *pFile, imagedata_type *pImg)
 
 	pImg->bColorImage = bFillPaletteDIB(pFile, pImg, tHeaderSize > 12);
 
-	if (pImg->iBitsPerComponent <= 8) {
+	if (pImg->uiBitsPerComponent <= 8) {
 		pImg->iComponents = 1;
 	} else {
-		pImg->iComponents = pImg->iBitsPerComponent / 8;
+		pImg->iComponents = (int)(pImg->uiBitsPerComponent / 8);
 	}
 
 	return TRUE;
@@ -300,7 +301,7 @@ bExamineJPEG(FILE *pFile, imagedata_type *pImg)
 		case M_SOF0:
 		case M_SOF1:
 			tLength = (size_t)usNextWordBE(pFile);
-			pImg->iBitsPerComponent = iNextByte(pFile);
+			pImg->uiBitsPerComponent = (UINT)iNextByte(pFile);
 			pImg->iHeight = (int)usNextWordBE(pFile);
 			pImg->iWidth = (int)usNextWordBE(pFile);
 			pImg->iComponents = iNextByte(pFile);
@@ -314,7 +315,7 @@ bExamineJPEG(FILE *pFile, imagedata_type *pImg)
 		 */
 			tLength = (size_t)usNextWordBE(pFile);
 			if (tLength < 12) {
-				(void)iSkipBytes(pFile, tLength - 2);
+				(void)tSkipBytes(pFile, tLength - 2);
 			} else {
 				for (iIndex = 0; iIndex < 5; iIndex++) {
 					appstring[iIndex] =
@@ -324,7 +325,7 @@ bExamineJPEG(FILE *pFile, imagedata_type *pImg)
 				if (STREQ(appstring, "Adobe")) {
 					pImg->bAdobe = TRUE;
 				}
-				(void)iSkipBytes(pFile, tLength - 7);
+				(void)tSkipBytes(pFile, tLength - 7);
 			}
 			break;
 		case M_SOI:		/* ignore markers without parameters */
@@ -341,14 +342,14 @@ bExamineJPEG(FILE *pFile, imagedata_type *pImg)
 			break;
 		default:		/* skip variable length markers */
 			tLength = (size_t)usNextWordBE(pFile);
-			(void)iSkipBytes(pFile, tLength - 2);
+			(void)tSkipBytes(pFile, tLength - 2);
 			break;
 		}
 	}
 
 	DBG_DEC(pImg->iWidth);
 	DBG_DEC(pImg->iHeight);
-	DBG_DEC(pImg->iBitsPerComponent);
+	DBG_DEC(pImg->uiBitsPerComponent);
 	DBG_DEC(pImg->iComponents);
 
 	/* Do some sanity checks with the parameters */
@@ -366,8 +367,8 @@ bExamineJPEG(FILE *pFile, imagedata_type *pImg)
 		DBG_MSG("Warning: SOF marker has incorrect length - ignored");
 	}
 
-	if (pImg->iBitsPerComponent != 8) {
-		DBG_DEC(pImg->iBitsPerComponent);
+	if (pImg->uiBitsPerComponent != 8) {
+		DBG_DEC(pImg->uiBitsPerComponent);
 		DBG_MSG("Not supported in PostScript level 2");
 		return FALSE;
 	}
@@ -399,7 +400,7 @@ bFillPalettePNG(FILE *pFile, imagedata_type *pImg, size_t tLength)
 	fail(pFile == NULL);
 	fail(pImg == NULL);
 
-	if (pImg->iBitsPerComponent > 8) {
+	if (pImg->uiBitsPerComponent > 8) {
 		/* No palette, image uses more than 256 colors */
 		return TRUE;
 	}
@@ -415,9 +416,9 @@ bFillPalettePNG(FILE *pFile, imagedata_type *pImg, size_t tLength)
 		return FALSE;
 	}
 
-	iEntries = tLength / 3;
+	iEntries = (int)(tLength / 3);
 	DBG_DEC(iEntries);
-	pImg->iColorsUsed = 1 << pImg->iBitsPerComponent;
+	pImg->iColorsUsed = 1 << pImg->uiBitsPerComponent;
 	DBG_DEC(pImg->iColorsUsed);
 
 	if (iEntries > 256) {
@@ -426,9 +427,9 @@ bFillPalettePNG(FILE *pFile, imagedata_type *pImg, size_t tLength)
 	}
 
 	for (iIndex = 0; iIndex < iEntries; iIndex++) {
-		pImg->aucPalette[iIndex][0] = (unsigned char)iNextByte(pFile);
-		pImg->aucPalette[iIndex][1] = (unsigned char)iNextByte(pFile);
-		pImg->aucPalette[iIndex][2] = (unsigned char)iNextByte(pFile);
+		pImg->aucPalette[iIndex][0] = (UCHAR)iNextByte(pFile);
+		pImg->aucPalette[iIndex][1] = (UCHAR)iNextByte(pFile);
+		pImg->aucPalette[iIndex][2] = (UCHAR)iNextByte(pFile);
 		NO_DBG_PRINT_BLOCK(pImg->aucPalette[iIndex], 3);
 	}
 	for (;iIndex < pImg->iColorsUsed; iIndex++) {
@@ -449,17 +450,17 @@ static BOOL
 bExaminePNG(FILE *pFile, imagedata_type *pImg)
 {
 	size_t		tLength;
-	unsigned long	ulLong1, ulLong2, ulName;
+	ULONG		ulLong1, ulLong2, ulName;
 	int		iIndex, iTmp;
 	int		iCompressionMethod, iFilterMethod, iInterlaceMethod;
 	int		iColor, iIncrement;
 	BOOL		bHasPalette, bHasAlpha;
-	unsigned char	aucBuf[4];
+	UCHAR	aucBuf[4];
 
 	/* Check signature */
 	ulLong1 = ulNextLongBE(pFile);
 	ulLong2 = ulNextLongBE(pFile);
-	if (ulLong1 != 0x89504e47 || ulLong2 != 0x0d0a1a0a) {
+	if (ulLong1 != 0x89504e47UL || ulLong2 != 0x0d0a1a0aUL) {
 		DBG_HEX(ulLong1);
 		DBG_HEX(ulLong2);
 		return FALSE;
@@ -473,7 +474,7 @@ bExaminePNG(FILE *pFile, imagedata_type *pImg)
 		tLength = (size_t)ulNextLongBE(pFile);
 		ulName = 0x00;
 		for (iIndex = 0; iIndex < (int)elementsof(aucBuf); iIndex++) {
-			aucBuf[iIndex] = (unsigned char)iNextByte(pFile);
+			aucBuf[iIndex] = (UCHAR)iNextByte(pFile);
 			if (!isalpha(aucBuf[iIndex])) {
 				DBG_HEX(aucBuf[iIndex]);
 				return FALSE;
@@ -491,13 +492,13 @@ bExaminePNG(FILE *pFile, imagedata_type *pImg)
 			}
 			pImg->iWidth = (int)ulNextLongBE(pFile);
 			pImg->iHeight = (int)ulNextLongBE(pFile);
-			pImg->iBitsPerComponent = iNextByte(pFile);
+			pImg->uiBitsPerComponent = (UINT)iNextByte(pFile);
 			iTmp = iNextByte(pFile);
 			NO_DBG_HEX(iTmp);
 			pImg->bColorImage = (iTmp & PNG_CB_COLOR) != 0;
 			bHasPalette = (iTmp & PNG_CB_PALETTE) != 0;
 			bHasAlpha = (iTmp & PNG_CB_ALPHA) != 0;
-			if (bHasPalette && pImg->iBitsPerComponent > 8) {
+			if (bHasPalette && pImg->uiBitsPerComponent > 8) {
 				/* This should not happen */
 				return FALSE;
 			}
@@ -522,7 +523,7 @@ bExaminePNG(FILE *pFile, imagedata_type *pImg)
 				return FALSE;
 			}
 			pImg->iColorsUsed = 0;
-			(void)iSkipBytes(pFile, tLength - 13 + 4);
+			(void)tSkipBytes(pFile, tLength - 13 + 4);
 			break;
 		case PNG_CN_PLTE:
 			if (!bHasPalette) {
@@ -531,17 +532,17 @@ bExaminePNG(FILE *pFile, imagedata_type *pImg)
 			if (!bFillPalettePNG(pFile, pImg, tLength)) {
 				return FALSE;
 			}
-			(void)iSkipBytes(pFile, 4);
+			(void)tSkipBytes(pFile, 4);
 			break;
 		default:
-			(void)iSkipBytes(pFile, tLength + 4);
+			(void)tSkipBytes(pFile, tLength + 4);
 			break;
 		}
 	}
 
 	DBG_DEC(pImg->iWidth);
 	DBG_DEC(pImg->iHeight);
-	DBG_DEC(pImg->iBitsPerComponent);
+	DBG_DEC(pImg->uiBitsPerComponent);
 	DBG_DEC(pImg->iColorsUsed);
 	DBG_DEC(pImg->iComponents);
 
@@ -550,10 +551,10 @@ bExaminePNG(FILE *pFile, imagedata_type *pImg)
 		return FALSE;
 	}
 
-	if (pImg->iBitsPerComponent != 1 && pImg->iBitsPerComponent != 2 &&
-	    pImg->iBitsPerComponent != 4 && pImg->iBitsPerComponent != 8 &&
-	    pImg->iBitsPerComponent != 16) {
-		DBG_DEC(pImg->iBitsPerComponent);
+	if (pImg->uiBitsPerComponent != 1 && pImg->uiBitsPerComponent != 2 &&
+	    pImg->uiBitsPerComponent != 4 && pImg->uiBitsPerComponent != 8 &&
+	    pImg->uiBitsPerComponent != 16) {
+		DBG_DEC(pImg->uiBitsPerComponent);
 		return  FALSE;
 	}
 
@@ -563,27 +564,27 @@ bExaminePNG(FILE *pFile, imagedata_type *pImg)
 		return FALSE;
 	}
 
-	if (pImg->iBitsPerComponent > 8) {
+	if (pImg->uiBitsPerComponent > 8) {
 		/* Not supported */
-		DBG_DEC(pImg->iBitsPerComponent);
+		DBG_DEC(pImg->uiBitsPerComponent);
 		return FALSE;
 	}
 
 	if (pImg->iColorsUsed == 0 &&
 	    pImg->iComponents == 1 &&
-	    pImg->iBitsPerComponent <= 4) {
+	    pImg->uiBitsPerComponent <= 4) {
 		/*
-		 * No palette is supplied, but Postscript needs one in these
-		 * cases, so we add a default one here
+		 * No palette is supplied, but PostScript needs one in these
+		 * cases, so we add a default palette here
 		 */
-		pImg->iColorsUsed = 1 << pImg->iBitsPerComponent;
+		pImg->iColorsUsed = 1 << pImg->uiBitsPerComponent;
 		iIncrement = 0xff / (pImg->iColorsUsed - 1);
 		for (iIndex = 0, iColor = 0x00;
 		     iIndex < pImg->iColorsUsed;
 		     iIndex++, iColor += iIncrement) {
-			pImg->aucPalette[iIndex][0] = (unsigned char)iColor;
-			pImg->aucPalette[iIndex][1] = (unsigned char)iColor;
-			pImg->aucPalette[iIndex][2] = (unsigned char)iColor;
+			pImg->aucPalette[iIndex][0] = (UCHAR)iColor;
+			pImg->aucPalette[iIndex][1] = (UCHAR)iColor;
+			pImg->aucPalette[iIndex][2] = (UCHAR)iColor;
 		}
 		/* Just to be sure */
 		pImg->bColorImage = FALSE;
@@ -595,197 +596,265 @@ bExaminePNG(FILE *pFile, imagedata_type *pImg)
 } /* end of bExaminePNG */
 
 /*
- * iFind6Image - skip until the image is found
+ * bExamineWMF - Examine a WMF header
+ *
+ * return TRUE if successful, otherwise FALSE
+ */
+static BOOL
+bExamineWMF(FILE *pFile, imagedata_type *pImg)
+{
+	ULONG	ulFileSize, ulMaxRecord, ulMagic;
+	USHORT	usType, usHeaderSize, usVersion, usNoObjects;
+
+	usType = usNextWord(pFile);
+	usHeaderSize = usNextWord(pFile);
+	ulMagic = ((ULONG)usHeaderSize << 16) | (ULONG)usType;
+	usVersion = usNextWord(pFile);
+	ulFileSize = ulNextLong(pFile);
+	usNoObjects = usNextWord(pFile);
+	ulMaxRecord = ulNextLong(pFile);
+
+	DBG_HEX(ulMagic);
+	DBG_DEC(usType);
+	DBG_DEC(usHeaderSize);
+	DBG_HEX(usVersion);
+	DBG_DEC(ulFileSize);
+	DBG_DEC(usNoObjects);
+	DBG_DEC(ulMaxRecord);
+
+	return FALSE;
+} /* end of bExamineWMF */
+
+#if !defined(__riscos)
+/*
+ * vImage2Papersize - make sure the image fits on the paper
+ *
+ * This function should not be needed if Word would do a proper job
+ */
+static void
+vImage2Papersize(imagedata_type *pImg)
+{
+	static int	iNetPageHeight = -1;
+	static int	iNetPageWidth = -1;
+	options_type	tOptions;
+        double  dVerFactor, dHorFactor, dFactor;
+
+	DBG_MSG("vImage2Papersize");
+
+	fail(pImg == NULL);
+
+	if (iNetPageHeight < 0 || iNetPageWidth < 0) {
+		/* Get the page dimensions from the options */
+		vGetOptions(&tOptions);
+		/* Add 999 to err on the save side */
+		iNetPageHeight = tOptions.iPageHeight -
+				(lDrawUnits2MilliPoints(
+					PS_TOP_MARGIN + PS_BOTTOM_MARGIN) +
+					999) / 1000;
+		iNetPageWidth = tOptions.iPageWidth -
+				(lDrawUnits2MilliPoints(
+					PS_LEFT_MARGIN + PS_RIGHT_MARGIN) +
+					999) / 1000;
+		DBG_DEC(iNetPageHeight);
+		DBG_DEC(iNetPageWidth);
+	}
+
+	if (pImg->iVerSizeScaled < iNetPageHeight &&
+	    pImg->iHorSizeScaled < iNetPageWidth) {
+		/* The image fits on the paper */
+		return;
+	}
+
+	dVerFactor = (double)iNetPageHeight / (double)pImg->iVerSizeScaled;
+	dHorFactor = (double)iNetPageWidth / (double)pImg->iHorSizeScaled;
+        dFactor = min(dVerFactor, dHorFactor);
+        DBG_FLT(dFactor);
+        /* Round down, just to be on the save side */
+        pImg->iVerSizeScaled = (int)(pImg->iVerSizeScaled * dFactor);
+        pImg->iHorSizeScaled = (int)(pImg->iHorSizeScaled * dFactor);
+} /* end of vImage2Papersize */
+#endif /* !__riscos */
+
+/*
+ * tFind6Image - skip until the image is found
  *
  * Find the image in Word 6/7 files
  *
  * returns the new position when a image is found, otherwise -1
  */
-static int
-iFind6Image(FILE *pFile, int iPos, int iLen, imagetype_enum *peImageType)
+static size_t
+tFind6Image(FILE *pFile, size_t tPosition, size_t tLength,
+	imagetype_enum *peImageType)
 {
-	unsigned long	ulMarker;
-	int		iElementLen, iToSkip;
-	unsigned short	usMarker;
+	ULONG	ulMarker;
+	size_t	tElementLen, tToSkip;
+	USHORT	usMarker;
 
 	fail(pFile == NULL);
-	fail(iPos < 0);
-	fail(iLen < 0);
 	fail(peImageType == NULL);
 
 	*peImageType = imagetype_is_unknown;
-	if (iPos + 18 >= iLen) {
-		return -1;
+	if (tPosition + 18 >= tLength) {
+		return (size_t)-1;
 	}
 
 	ulMarker = ulNextLong(pFile);
 	if (ulMarker != 0x00090001) {
 		DBG_HEX(ulMarker);
-		return -1;
+		return (size_t)-1;
 	}
 	usMarker = usNextWord(pFile);
 	if (usMarker != 0x0300) {
 		DBG_HEX(usMarker);
-		return -1;
+		return (size_t)-1;
 	}
-	(void)iSkipBytes(pFile, 10);
+	(void)tSkipBytes(pFile, 10);
 	usMarker = usNextWord(pFile);
 	if (usMarker != 0x0000) {
 		DBG_HEX(usMarker);
-		return -1;
+		return (size_t)-1;
 	}
-	iPos += 18;
+	tPosition += 18;
 
-	while (iPos + 6 < iLen) {
-		iElementLen = (int)ulNextLong(pFile);
+	while (tPosition + 6 <= tLength) {
+		tElementLen = (size_t)ulNextLong(pFile);
 		usMarker = usNextWord(pFile);
-		iPos += 6;
-		DBG_DEC(iElementLen);
-		DBG_HEX(usMarker);
-		if (iElementLen == 3) {
-#if 0
-			DBG_MSG("DIB");
-			*peImageType = imagetype_is_dib;
-			return iPos;
-#else
-			DBG_DEC(iPos);
-			return -1;
-#endif
-		}
-
+		tPosition += 6;
+		NO_DBG_DEC(tElementLen);
+		NO_DBG_HEX(usMarker);
 		switch (usMarker) {
+		case 0x0000:
+			DBG_HEX(ulGetDataOffset(pFile));
+			return (size_t)-1;
 		case 0x0b41:
 			DBG_MSG("DIB");
 			*peImageType = imagetype_is_dib;
-			iPos += iSkipBytes(pFile, 20);
-			return iPos;
+			tPosition += tSkipBytes(pFile, 20);
+			return tPosition;
 		case 0x0f43:
 			DBG_MSG("DIB");
 			*peImageType = imagetype_is_dib;
-			iPos += iSkipBytes(pFile, 22);
-			return iPos;
+			tPosition += tSkipBytes(pFile, 22);
+			return tPosition;
 		default:
-			if (iElementLen > INT_MAX / 2 + 3) {
+			if (tElementLen < 3) {
+				break;
+			}
+			if (tElementLen > SIZE_T_MAX / 2) {
 				/*
-				 * This value is so big the number of bytes
-				 * to skip can not be computed
+				 * No need to compute the number of bytes
+				 * to skip
 				 */
-				DBG_DEC(iElementLen);
-				return -1;
+				DBG_DEC(tElementLen);
+				DBG_HEX(tElementLen);
+				DBG_FIXME();
+				return (size_t)-1;
 			}
-			iToSkip = (iElementLen - 3) * 2;
-			if (iToSkip <= 0 || iToSkip > iLen - iPos) {
+			tToSkip = tElementLen * 2 - 6;
+			if (tToSkip > tLength - tPosition) {
 				/* You can't skip this number of bytes */
-				DBG_DEC(iToSkip);
-				DBG_DEC(iLen - iPos);
-				return -1;
+				DBG_DEC(tToSkip);
+				DBG_DEC(tLength - tPosition);
+				return (size_t)-1;
 			}
-			iPos += iSkipBytes(pFile, (size_t)iToSkip);
+			tPosition += tSkipBytes(pFile, tToSkip);
 			break;
 		}
 	}
 
-	return -1;
-} /* end of iFind6Image */
+	return (size_t)-1;
+} /* end of tFind6Image */
 
 /*
- * iFind8Image - skip until the image is found
+ * tFind8Image - skip until the image is found
  *
- * Find the image in Word 8/97 files
+ * Find the image in Word 8/9/10 files
  *
  * returns the new position when a image is found, otherwise -1
  */
-static int
-iFind8Image(FILE *pFile, int iPos, int iLen, imagetype_enum *peImageType)
+static size_t
+tFind8Image(FILE *pFile, size_t tPosition, size_t tLength,
+	imagetype_enum *peImageType)
 {
-	int	iElementTag, iElementLen;
-	unsigned short usID;
+	size_t	tElementLen, tNameLen;
+	USHORT	usID, usElementTag;
 
 	fail(pFile == NULL);
-	fail(iPos < 0);
-	fail(iLen < 0);
 	fail(peImageType == NULL);
 
 	*peImageType = imagetype_is_unknown;
-	while (iPos + 8 < iLen) {
+	while (tPosition + 8 <= tLength) {
 		usID = usNextWord(pFile) >> 4;
-		iElementTag = (int)usNextWord(pFile);
-		iElementLen = (int)ulNextLong(pFile);
-		iPos += 8;
+		usElementTag = usNextWord(pFile);
+		tElementLen = (size_t)ulNextLong(pFile);
+		tPosition += 8;
 		NO_DBG_HEX(usID);
-		NO_DBG_HEX(iElementTag);
-		NO_DBG_DEC(iElementLen);
-		switch (iElementTag) {
-		case 0xf001:
-		case 0xf002:
-		case 0xf003:
-		case 0xf004:
-		case 0xf005:
+		NO_DBG_HEX(usElementTag);
+		NO_DBG_DEC(tElementLen);
+		switch (usElementTag) {
+		case 0xf000: case 0xf001: case 0xf002: case 0xf003:
+		case 0xf004: case 0xf005:
 			break;
 		case 0xf007:
-			iPos += iSkipBytes(pFile, 36);
+			tPosition += tSkipBytes(pFile, 33);
+			tNameLen = (size_t)iNextByte(pFile);
+			tPosition++;
+			DBG_DEC_C(tNameLen != 0, tNameLen);
+			tPosition += tSkipBytes(pFile, 2 + tNameLen * 2);
 			break;
 		case 0xf008:
-			iPos += iSkipBytes(pFile, 8);
+			tPosition += tSkipBytes(pFile, 8);
 			break;
 		case 0xf009:
-			iPos += iSkipBytes(pFile, 16);
+			tPosition += tSkipBytes(pFile, 16);
 			break;
-		case 0xf000:
-		case 0xf006:
-		case 0xf00a:
-		case 0xf00b:
-		case 0xf00d:
-		case 0xf00e:
-		case 0xf00f:
-		case 0xf010:
-		case 0xf011:
-			if (iElementLen < 0) {
-				DBG_DEC(iElementLen);
-				return -1;
-			}
-			iPos += iSkipBytes(pFile, (size_t)iElementLen);
+		case 0xf006: case 0xf00a: case 0xf00b: case 0xf00d:
+		case 0xf00e: case 0xf00f: case 0xf010: case 0xf011:
+		case 0xf122:
+			tPosition += tSkipBytes(pFile, tElementLen);
 			break;
 		case 0xf01a:
 			DBG_MSG("EMF");
 			*peImageType = imagetype_is_emf;
-			iPos += iSkipBytes(pFile, usID == 0x3d4 ? 50 : 66);
-			return iPos;
+			tPosition += tSkipBytes(pFile, usID == 0x3d4 ? 50 : 66);
+			return tPosition;
 		case 0xf01b:
 			DBG_MSG("WMF");
 			*peImageType = imagetype_is_wmf;
-			iPos += iSkipBytes(pFile, usID == 0x216 ? 50 : 66);
-			return iPos;
+			tPosition += tSkipBytes(pFile, usID == 0x216 ? 50 : 66);
+			return tPosition;
 		case 0xf01c:
 			DBG_MSG("PICT");
 			*peImageType = imagetype_is_pict;
-			iPos += iSkipBytes(pFile, usID == 0x542 ? 17 : 33) ;
-			return iPos;
+			tPosition += tSkipBytes(pFile, usID == 0x542 ? 17 : 33);
+			return tPosition;
 		case 0xf01d:
 			DBG_MSG("JPEG");
 			*peImageType = imagetype_is_jpeg;
-			iPos += iSkipBytes(pFile, usID == 0x46a ? 17 : 33);
-			return iPos;
+			tPosition += tSkipBytes(pFile, usID == 0x46a ? 17 : 33);
+			return tPosition;
 		case 0xf01e:
 			DBG_MSG("PNG");
 			*peImageType = imagetype_is_png;
-			iPos += iSkipBytes(pFile, usID == 0x6e0 ? 17 : 33);
-			return iPos;
+			tPosition += tSkipBytes(pFile, usID == 0x6e0 ? 17 : 33);
+			return tPosition;
 		case 0xf01f:
 			DBG_MSG("DIB");
 			/* DIB is a BMP minus its 14 byte header */
 			*peImageType = imagetype_is_dib;
-			iPos += iSkipBytes(pFile, usID == 0x7a8 ? 17 : 33);
-			return iPos;
+			tPosition += tSkipBytes(pFile, usID == 0x7a8 ? 17 : 33);
+			return tPosition;
 		case 0xf00c:
 		default:
-			DBG_HEX(iElementTag);
-			return -1;
+			DBG_HEX(usElementTag);
+			DBG_DEC_C(tElementLen % 4 != 0, tElementLen);
+			DBG_FIXME();
+			return (size_t)-1;
 		}
 	}
 
-	return -1;
-} /* end of iFind8Image */
+	return (size_t)-1;
+} /* end of tFind8Image */
 
 /*
  * eExamineImage - Examine the image
@@ -793,67 +862,69 @@ iFind8Image(FILE *pFile, int iPos, int iLen, imagetype_enum *peImageType)
  * Returns an indication of the amount of information found
  */
 image_info_enum
-eExamineImage(FILE *pFile, long lFileOffsetImage, imagedata_type *pImg)
+eExamineImage(FILE *pFile, ULONG ulFileOffsetImage, imagedata_type *pImg)
 {
 	long	lTmp;
-	size_t	tWordHeaderLen;
-	int	iLen, iPos;
-	int	iType, iHorizontalSize, iVerticalSize;
-	unsigned short	usHorizontalScalingFactor, usVerticalScalingFactor;
+	size_t	tWordHeaderLen, tLength, tPos;
+	int	iType, iHorSize, iVerSize;
+	USHORT	usHorScalingFactor, usVerScalingFactor;
 
-	if (lFileOffsetImage < 0) {
+	if (ulFileOffsetImage == FC_INVALID) {
 		return image_no_information;
 	}
-	DBG_HEX(lFileOffsetImage);
+	DBG_HEX(ulFileOffsetImage);
 
-	if (!bSetDataOffset(pFile, lFileOffsetImage)) {
+	if (!bSetDataOffset(pFile, ulFileOffsetImage)) {
 		return image_no_information;
 	}
 
-	iLen = (int)ulNextLong(pFile);
-	DBG_DEC(iLen);
-	if (iLen < 58) {
+	tLength = (size_t)ulNextLong(pFile);
+	DBG_DEC(tLength);
+	if (tLength < 46) {
 		/* Smaller than the smallest known header */
+		DBG_FIXME();
 		return image_no_information;
 	}
 	tWordHeaderLen = (size_t)usNextWord(pFile);
 	DBG_DEC(tWordHeaderLen);
-	fail(tWordHeaderLen != 58 && tWordHeaderLen != 68);
+	fail(tWordHeaderLen != 46 &&
+		tWordHeaderLen != 58 &&
+		tWordHeaderLen != 68);
 
-	if (iLen < (int)tWordHeaderLen) {
+	if (tLength < tWordHeaderLen) {
 		/* Smaller than the current header */
 		return image_no_information;
 	}
 	iType = (int)usNextWord(pFile);
 	DBG_DEC(iType);
-	(void)iSkipBytes(pFile, 28 - 8);
+	(void)tSkipBytes(pFile, 28 - 8);
 
 	lTmp = lTwips2MilliPoints(usNextWord(pFile));
-	iHorizontalSize = (int)(lTmp / 1000);
+	iHorSize = (int)(lTmp / 1000);
 	if (lTmp % 1000 != 0) {
-		iHorizontalSize++;
+		iHorSize++;
 	}
-	DBG_DEC(iHorizontalSize);
+	DBG_DEC(iHorSize);
 	lTmp = lTwips2MilliPoints(usNextWord(pFile));
-	iVerticalSize = (int)(lTmp / 1000);
+	iVerSize = (int)(lTmp / 1000);
 	if (lTmp % 1000 != 0) {
-		iVerticalSize++;
+		iVerSize++;
 	}
-	DBG_DEC(iVerticalSize);
+	DBG_DEC(iVerSize);
 
-	usHorizontalScalingFactor = usNextWord(pFile);
-	DBG_DEC(usHorizontalScalingFactor);
-	usVerticalScalingFactor = usNextWord(pFile);
-	DBG_DEC(usVerticalScalingFactor);
-	
+	usHorScalingFactor = usNextWord(pFile);
+	DBG_DEC(usHorScalingFactor);
+	usVerScalingFactor = usNextWord(pFile);
+	DBG_DEC(usVerScalingFactor);
+
 	/* Sanity checks */
-	lTmp = (long)iHorizontalSize * (long)usHorizontalScalingFactor;
+	lTmp = (long)iHorSize * (long)usHorScalingFactor;
 	if (lTmp < 2835) {
 		/* This image would be less than 1 millimeter wide */
 		DBG_DEC(lTmp);
 		return image_no_information;
 	}
-	lTmp = (long)iVerticalSize * (long)usVerticalScalingFactor;
+	lTmp = (long)iVerSize * (long)usVerScalingFactor;
 	if (lTmp < 2835) {
 		/* This image would be less than 1 millimeter high */
 		DBG_DEC(lTmp);
@@ -861,49 +932,54 @@ eExamineImage(FILE *pFile, long lFileOffsetImage, imagedata_type *pImg)
 	}
 
 	/* Skip the rest of the header */
-	(void)iSkipBytes(pFile, tWordHeaderLen - 36);
-	iPos = (int)tWordHeaderLen;
+	(void)tSkipBytes(pFile, tWordHeaderLen - 36);
+	tPos = tWordHeaderLen;
 
 	(void)memset(pImg, 0, sizeof(*pImg));
 
 	switch (iType) {
 	case   7:
 	case   8:
-		iPos = iFind6Image(pFile, iPos, iLen, &pImg->eImageType);
-		if (iPos < 0) {
+		tPos = tFind6Image(pFile, tPos, tLength, &pImg->eImageType);
+		if (tPos == (size_t)-1) {
 			/* No image found */
 			return image_no_information;
 		}
-		DBG_HEX(iPos);
+		DBG_HEX(tPos);
 		break;
-	case  94:
-		DBG_HEX(lFileOffsetImage + iPos);
-		return image_no_information;
+	case  94:	/* Word 6/7, no image just a pathname */
+		pImg->eImageType = imagetype_is_external;
+		DBG_HEX(ulFileOffsetImage + tPos);
+		break;
 	case 100:
-		iPos = iFind8Image(pFile, iPos, iLen, &pImg->eImageType);
-		if (iPos < 0) {
+		tPos = tFind8Image(pFile, tPos, tLength, &pImg->eImageType);
+		if (tPos == (size_t)-1) {
 			/* No image found */
 			return image_no_information;
 		}
-		DBG_HEX(iPos);
+		DBG_HEX(tPos);
 		break;
-	case 102:
-		DBG_HEX(lFileOffsetImage + iPos);
-		return image_no_information;
+	case 102:	/* Word 8/9/10, no image just a pathname or URL */
+		pImg->eImageType = imagetype_is_external;
+		DBG_HEX(ulFileOffsetImage + tPos);
+		break;
 	default:
 		DBG_DEC(iType);
-		DBG_HEX(lFileOffsetImage + iPos);
+		DBG_HEX(ulFileOffsetImage + tPos);
+		DBG_FIXME();
 		return image_no_information;
 	}
 
 	/* Minimal information is now available */
-	pImg->iLength = iLen;
-	pImg->iPosition = iPos;
-	pImg->iHorizontalSize = iHorizontalSize;
-	pImg->iVerticalSize = iVerticalSize;
-	pImg->dHorizontalScalingFactor =
-				(double)usHorizontalScalingFactor / 1000.0;
-	pImg->dVerticalScalingFactor = (double)usVerticalScalingFactor / 1000.0;
+	pImg->tLength = tLength;
+	pImg->tPosition = tPos;
+	pImg->iHorSizeScaled =
+		(int)(((long)iHorSize * (long)usHorScalingFactor + 500) / 1000);
+	pImg->iVerSizeScaled =
+		(int)(((long)iVerSize * (long)usVerScalingFactor + 500) / 1000);
+#if !defined(__riscos)
+	vImage2Papersize(pImg);
+#endif /* !__riscos */
 
 	/* Image type specific examinations */
 	switch (pImg->eImageType) {
@@ -922,9 +998,14 @@ eExamineImage(FILE *pFile, long lFileOffsetImage, imagedata_type *pImg)
 			return image_full_information;
 		}
 		return image_minimal_information;
-	case imagetype_is_emf:
 	case imagetype_is_wmf:
+		if (bExamineWMF(pFile, pImg)) {
+			return image_full_information;
+		}
+		return image_minimal_information;
+	case imagetype_is_emf:
 	case imagetype_is_pict:
+	case imagetype_is_external:
 		return image_minimal_information;
 	case imagetype_is_unknown:
 	default:

@@ -1,6 +1,6 @@
 /*
  * notes.c
- * Copyright (C) 1998-2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to tell the difference between footnotes and endnotes
@@ -9,9 +9,9 @@
 #include "antiword.h"
 
 /* Variables needed to write the Footnote and Endnote Lists */
-static long	*alFootnoteList = NULL;
+static ULONG	*aulFootnoteList = NULL;
 static size_t	tFootnoteListLength = 0;
-static long	*alEndnoteList = NULL;
+static ULONG	*aulEndnoteList = NULL;
 static size_t	tEndnoteListLength = 0;
 
 
@@ -24,8 +24,8 @@ vDestroyNotesInfoLists(void)
 	DBG_MSG("vDestroyNotesInfoLists");
 
 	/* Free the lists and reset all control variables */
-	alEndnoteList = xfree(alEndnoteList);
-	alFootnoteList = xfree(alFootnoteList);
+	aulEndnoteList = xfree(aulEndnoteList);
+	aulFootnoteList = xfree(aulFootnoteList);
 	tEndnoteListLength = 0;
 	tFootnoteListLength = 0;
 } /* end of vDestroyNotesInfoLists */
@@ -34,25 +34,25 @@ vDestroyNotesInfoLists(void)
  * Build the list with footnote information for Word 6/7 files
  */
 static void
-vGet6FootnotesInfo(FILE *pFile, int iStartBlock,
-	const int *aiBBD, size_t tBBDLen,
-	const unsigned char *aucHeader)
+vGet6FootnotesInfo(FILE *pFile, ULONG ulStartBlock,
+	const ULONG *aulBBD, size_t tBBDLen,
+	const UCHAR *aucHeader)
 {
-	unsigned char	*aucBuffer;
-	long	lFileOffset, lBeginOfText, lOffset;
-	size_t	tBeginFootnoteInfo, tFootnoteInfoLen;
+	UCHAR	*aucBuffer;
+	ULONG	ulFileOffset, ulBeginOfText, ulOffset, ulBeginFootnoteInfo;
+	size_t	tFootnoteInfoLen;
 	int	iIndex;
 
 	fail(pFile == NULL || aucHeader == NULL);
-	fail(iStartBlock < 0);
-	fail(aiBBD == NULL);
+	fail(ulStartBlock > MAX_BLOCKNUMBER && ulStartBlock != END_OF_CHAIN);
+	fail(aulBBD == NULL);
 
-	lBeginOfText = (long)ulGetLong(0x18, aucHeader);
-	DBG_HEX(lBeginOfText);
-	tBeginFootnoteInfo = (size_t)ulGetLong(0x68, aucHeader);
-	DBG_HEX(tBeginFootnoteInfo);
+	ulBeginOfText = ulGetLong(0x18, aucHeader);
+	NO_DBG_HEX(ulBeginOfText);
+	ulBeginFootnoteInfo = ulGetLong(0x68, aucHeader);
+	NO_DBG_HEX(ulBeginFootnoteInfo);
 	tFootnoteInfoLen = (size_t)ulGetLong(0x6c, aucHeader);
-	DBG_DEC(tFootnoteInfoLen);
+	NO_DBG_DEC(tFootnoteInfoLen);
 
 	if (tFootnoteInfoLen < 10) {
 		DBG_MSG("No Footnotes in this document");
@@ -60,9 +60,9 @@ vGet6FootnotesInfo(FILE *pFile, int iStartBlock,
 	}
 
 	aucBuffer = xmalloc(tFootnoteInfoLen);
-	if (!bReadBuffer(pFile, iStartBlock,
-			aiBBD, tBBDLen, BIG_BLOCK_SIZE,
-			aucBuffer, tBeginFootnoteInfo, tFootnoteInfoLen)) {
+	if (!bReadBuffer(pFile, ulStartBlock,
+			aulBBD, tBBDLen, BIG_BLOCK_SIZE,
+			aucBuffer, ulBeginFootnoteInfo, tFootnoteInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
 		return;
 	}
@@ -72,15 +72,15 @@ vGet6FootnotesInfo(FILE *pFile, int iStartBlock,
 	tFootnoteListLength = (tFootnoteInfoLen - 4) / 6;
 	fail(tFootnoteListLength == 0);
 
-	fail(alFootnoteList != NULL);
-	alFootnoteList = xmalloc(sizeof(long) * tFootnoteListLength);
+	fail(aulFootnoteList != NULL);
+	aulFootnoteList = xcalloc(tFootnoteListLength, sizeof(ULONG));
 
 	for (iIndex = 0; iIndex < (int)tFootnoteListLength; iIndex++) {
-		lOffset = (long)ulGetLong(iIndex * 4, aucBuffer);
-		DBG_HEX(lOffset);
-		lFileOffset = lTextOffset2FileOffset(lBeginOfText + lOffset);
-		DBG_HEX(lFileOffset);
-		alFootnoteList[iIndex] = lFileOffset;
+		ulOffset = ulGetLong(iIndex * 4, aucBuffer);
+		NO_DBG_HEX(ulOffset);
+		ulFileOffset = ulCharPos2FileOffset(ulBeginOfText + ulOffset);
+		NO_DBG_HEX(ulFileOffset);
+		aulFootnoteList[iIndex] = ulFileOffset;
 	}
 	aucBuffer = xfree(aucBuffer);
 } /* end of vGet6FootnotesInfo */
@@ -89,25 +89,25 @@ vGet6FootnotesInfo(FILE *pFile, int iStartBlock,
  * Build the list with endnote information for Word 6/7 files
  */
 static void
-vGet6EndnotesInfo(FILE *pFile, int iStartBlock,
-	const int *aiBBD, size_t tBBDLen,
-	const unsigned char *aucHeader)
+vGet6EndnotesInfo(FILE *pFile, ULONG ulStartBlock,
+	const ULONG *aulBBD, size_t tBBDLen,
+	const UCHAR *aucHeader)
 {
-	unsigned char	*aucBuffer;
-	long	lFileOffset, lBeginOfText, lOffset;
-	size_t	tBeginEndnoteInfo, tEndnoteInfoLen;
+	UCHAR	*aucBuffer;
+	ULONG	ulFileOffset, ulBeginOfText, ulOffset, ulBeginEndnoteInfo;
+	size_t	tEndnoteInfoLen;
 	int	iIndex;
 
 	fail(pFile == NULL || aucHeader == NULL);
-	fail(iStartBlock < 0);
-	fail(aiBBD == NULL);
+	fail(ulStartBlock > MAX_BLOCKNUMBER && ulStartBlock != END_OF_CHAIN);
+	fail(aulBBD == NULL);
 
-	lBeginOfText = (long)ulGetLong(0x18, aucHeader);
-	DBG_HEX(lBeginOfText);
-	tBeginEndnoteInfo = (size_t)ulGetLong(0x1d2, aucHeader);
-	DBG_HEX(tBeginEndnoteInfo);
+	ulBeginOfText = ulGetLong(0x18, aucHeader);
+	NO_DBG_HEX(ulBeginOfText);
+	ulBeginEndnoteInfo = ulGetLong(0x1d2, aucHeader);
+	NO_DBG_HEX(ulBeginEndnoteInfo);
 	tEndnoteInfoLen = (size_t)ulGetLong(0x1d6, aucHeader);
-	DBG_DEC(tEndnoteInfoLen);
+	NO_DBG_DEC(tEndnoteInfoLen);
 
 	if (tEndnoteInfoLen < 10) {
 		DBG_MSG("No Endnotes in this document");
@@ -115,9 +115,9 @@ vGet6EndnotesInfo(FILE *pFile, int iStartBlock,
 	}
 
 	aucBuffer = xmalloc(tEndnoteInfoLen);
-	if (!bReadBuffer(pFile, iStartBlock,
-			aiBBD, tBBDLen, BIG_BLOCK_SIZE,
-			aucBuffer, tBeginEndnoteInfo, tEndnoteInfoLen)) {
+	if (!bReadBuffer(pFile, ulStartBlock,
+			aulBBD, tBBDLen, BIG_BLOCK_SIZE,
+			aucBuffer, ulBeginEndnoteInfo, tEndnoteInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
 		return;
 	}
@@ -127,15 +127,15 @@ vGet6EndnotesInfo(FILE *pFile, int iStartBlock,
 	tEndnoteListLength = (tEndnoteInfoLen - 4) / 6;
 	fail(tEndnoteListLength == 0);
 
-	fail(alEndnoteList != NULL);
-	alEndnoteList = xmalloc(sizeof(long) * tEndnoteListLength);
+	fail(aulEndnoteList != NULL);
+	aulEndnoteList = xcalloc(tEndnoteListLength, sizeof(ULONG));
 
 	for (iIndex = 0; iIndex < (int)tEndnoteListLength; iIndex++) {
-		lOffset = (long)ulGetLong(iIndex * 4, aucBuffer);
-		DBG_HEX(lOffset);
-		lFileOffset = lTextOffset2FileOffset(lBeginOfText + lOffset);
-		DBG_HEX(lFileOffset);
-		alEndnoteList[iIndex] = lFileOffset;
+		ulOffset = ulGetLong(iIndex * 4, aucBuffer);
+		NO_DBG_HEX(ulOffset);
+		ulFileOffset = ulCharPos2FileOffset(ulBeginOfText + ulOffset);
+		NO_DBG_HEX(ulFileOffset);
+		aulEndnoteList[iIndex] = ulFileOffset;
 	}
 	aucBuffer = xfree(aucBuffer);
 } /* end of vGet6EndnotesInfo */
@@ -144,39 +144,39 @@ vGet6EndnotesInfo(FILE *pFile, int iStartBlock,
  * Build the lists note information for Word 6/7 files
  */
 static void
-vGet6NotesInfo(FILE *pFile, int iStartBlock,
-	const int *aiBBD, size_t tBBDLen,
-	const unsigned char *aucHeader)
+vGet6NotesInfo(FILE *pFile, ULONG ulStartBlock,
+	const ULONG *aulBBD, size_t tBBDLen,
+	const UCHAR *aucHeader)
 {
-	vGet6FootnotesInfo(pFile, iStartBlock,
-			aiBBD, tBBDLen, aucHeader);
-	vGet6EndnotesInfo(pFile, iStartBlock,
-			aiBBD, tBBDLen, aucHeader);
+	vGet6FootnotesInfo(pFile, ulStartBlock,
+			aulBBD, tBBDLen, aucHeader);
+	vGet6EndnotesInfo(pFile, ulStartBlock,
+			aulBBD, tBBDLen, aucHeader);
 } /* end of vGet6NotesInfo */
 
 /*
- * Build the list with footnote information for Word 8/97 files
+ * Build the list with footnote information for Word 8/9/10 files
  */
 static void
 vGet8FootnotesInfo(FILE *pFile, const pps_info_type *pPPS,
-	const int *aiBBD, size_t tBBDLen, const int *aiSBD, size_t tSBDLen,
-	const unsigned char *aucHeader)
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader)
 {
-	const int	*aiBlockDepot;
-	unsigned char	*aucBuffer;
-	long	lFileOffset, lBeginOfText, lOffset, lTableSize;
-	size_t	tBeginFootnoteInfo, tFootnoteInfoLen;
-	size_t	tBlockDepotLen, tBlockSize;
-	int	iTableStartBlock;
+	const ULONG	*aulBlockDepot;
+	UCHAR	*aucBuffer;
+	ULONG	ulFileOffset, ulBeginOfText, ulOffset, ulBeginFootnoteInfo;
+	ULONG	ulTableSize, ulTableStartBlock;
+	size_t	tFootnoteInfoLen, tBlockDepotLen, tBlockSize;
 	int	iIndex;
-	unsigned short	usDocStatus;
+	USHORT	usDocStatus;
 
-	lBeginOfText = (long)ulGetLong(0x18, aucHeader);
-	DBG_HEX(lBeginOfText);
-	tBeginFootnoteInfo = (size_t)ulGetLong(0xaa, aucHeader);
-	DBG_HEX(tBeginFootnoteInfo);
+	ulBeginOfText = ulGetLong(0x18, aucHeader);
+	NO_DBG_HEX(ulBeginOfText);
+	ulBeginFootnoteInfo = ulGetLong(0xaa, aucHeader);
+	NO_DBG_HEX(ulBeginFootnoteInfo);
 	tFootnoteInfoLen = (size_t)ulGetLong(0xae, aucHeader);
-	DBG_DEC(tFootnoteInfoLen);
+	NO_DBG_DEC(tFootnoteInfoLen);
 
 	if (tFootnoteInfoLen < 10) {
 		DBG_MSG("No Footnotes in this document");
@@ -186,34 +186,33 @@ vGet8FootnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 	/* Use 0Table or 1Table? */
 	usDocStatus = usGetWord(0x0a, aucHeader);
 	if (usDocStatus & BIT(9)) {
-		iTableStartBlock = pPPS->t1Table.iSb;
-		lTableSize = pPPS->t1Table.lSize;
+		ulTableStartBlock = pPPS->t1Table.ulSB;
+		ulTableSize = pPPS->t1Table.ulSize;
 	} else {
-		iTableStartBlock = pPPS->t0Table.iSb;
-		lTableSize = pPPS->t0Table.lSize;
+		ulTableStartBlock = pPPS->t0Table.ulSB;
+		ulTableSize = pPPS->t0Table.ulSize;
 	}
-	DBG_DEC(iTableStartBlock);
-	if (iTableStartBlock < 0) {
-		DBG_DEC(iTableStartBlock);
+	NO_DBG_DEC(ulTableStartBlock);
+	if (ulTableStartBlock == 0) {
 		DBG_MSG("No notes information");
 		return;
 	}
-	DBG_HEX(lTableSize);
-	if (lTableSize < MIN_SIZE_FOR_BBD_USE) {
+	NO_DBG_HEX(ulTableSize);
+	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
 	  	/* Use the Small Block Depot */
-		aiBlockDepot = aiSBD;
+		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
 		tBlockSize = SMALL_BLOCK_SIZE;
 	} else {
 	  	/* Use the Big Block Depot */
-		aiBlockDepot = aiBBD;
+		aulBlockDepot = aulBBD;
 		tBlockDepotLen = tBBDLen;
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tFootnoteInfoLen);
-	if (!bReadBuffer(pFile, iTableStartBlock,
-			aiBlockDepot, tBlockDepotLen, tBlockSize,
-			aucBuffer, tBeginFootnoteInfo, tFootnoteInfoLen)) {
+	if (!bReadBuffer(pFile, ulTableStartBlock,
+			aulBlockDepot, tBlockDepotLen, tBlockSize,
+			aucBuffer, ulBeginFootnoteInfo, tFootnoteInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
 		return;
 	}
@@ -223,41 +222,42 @@ vGet8FootnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 	tFootnoteListLength = (tFootnoteInfoLen - 4) / 6;
 	fail(tFootnoteListLength == 0);
 
-	fail(alFootnoteList != NULL);
-	alFootnoteList = xmalloc(sizeof(long) * tFootnoteListLength);
+	fail(aulFootnoteList != NULL);
+	aulFootnoteList = xcalloc(tFootnoteListLength, sizeof(ULONG));
 
 	for (iIndex = 0; iIndex < (int)tFootnoteListLength; iIndex++) {
-		lOffset = (long)ulGetLong(iIndex * 4, aucBuffer);
-		DBG_HEX(lOffset);
-		lFileOffset = lTextOffset2FileOffset(lBeginOfText + lOffset);
-		DBG_HEX(lFileOffset);
-		alFootnoteList[iIndex] = lFileOffset;
+		ulOffset = ulGetLong(iIndex * 4, aucBuffer);
+		NO_DBG_HEX(ulOffset);
+		ulFileOffset = ulCharPos2FileOffset(ulBeginOfText + ulOffset);
+		NO_DBG_HEX(ulFileOffset);
+		aulFootnoteList[iIndex] = ulFileOffset;
 	}
 	aucBuffer = xfree(aucBuffer);
 } /* end of vGet8FootnotesInfo */
 
 /*
- * Build the list with endnote information for Word 8/97 files
+ * Build the list with endnote information for Word 8/9/10 files
  */
 static void
 vGet8EndnotesInfo(FILE *pFile, const pps_info_type *pPPS,
-	const int *aiBBD, size_t tBBDLen, const int *aiSBD, size_t tSBDLen,
-	const unsigned char *aucHeader)
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader)
 {
-	const int	*aiBlockDepot;
-	unsigned char	*aucBuffer;
-	long	lFileOffset, lBeginOfText, lOffset, lTableSize;
-	size_t	tBeginEndnoteInfo, tEndnoteInfoLen, tBlockDepotLen, tBlockSize;
-	int	iTableStartBlock;
+	const ULONG	*aulBlockDepot;
+	UCHAR	*aucBuffer;
+	ULONG	ulFileOffset, ulBeginOfText, ulOffset, ulBeginEndnoteInfo;
+	ULONG	ulTableSize, ulTableStartBlock;
+	size_t	tEndnoteInfoLen, tBlockDepotLen, tBlockSize;
 	int	iIndex;
-	unsigned short	usDocStatus;
+	USHORT	usDocStatus;
 
-	lBeginOfText = (long)ulGetLong(0x18, aucHeader);
-	DBG_HEX(lBeginOfText);
-	tBeginEndnoteInfo = (size_t)ulGetLong(0x20a, aucHeader);
-	DBG_HEX(tBeginEndnoteInfo);
+	ulBeginOfText = ulGetLong(0x18, aucHeader);
+	NO_DBG_HEX(ulBeginOfText);
+	ulBeginEndnoteInfo = ulGetLong(0x20a, aucHeader);
+	NO_DBG_HEX(ulBeginEndnoteInfo);
 	tEndnoteInfoLen = (size_t)ulGetLong(0x20e, aucHeader);
-	DBG_DEC(tEndnoteInfoLen);
+	NO_DBG_DEC(tEndnoteInfoLen);
 
 	if (tEndnoteInfoLen < 10) {
 		DBG_MSG("No Endnotes in this document");
@@ -267,68 +267,68 @@ vGet8EndnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 	/* Use 0Table or 1Table? */
 	usDocStatus = usGetWord(0x0a, aucHeader);
 	if (usDocStatus & BIT(9)) {
-		iTableStartBlock = pPPS->t1Table.iSb;
-		lTableSize = pPPS->t1Table.lSize;
+		ulTableStartBlock = pPPS->t1Table.ulSB;
+		ulTableSize = pPPS->t1Table.ulSize;
 	} else {
-		iTableStartBlock = pPPS->t0Table.iSb;
-		lTableSize = pPPS->t0Table.lSize;
+		ulTableStartBlock = pPPS->t0Table.ulSB;
+		ulTableSize = pPPS->t0Table.ulSize;
 	}
-	DBG_DEC(iTableStartBlock);
-	if (iTableStartBlock < 0) {
-		DBG_DEC(iTableStartBlock);
+	NO_DBG_DEC(ulTableStartBlock);
+	if (ulTableStartBlock == 0) {
 		DBG_MSG("No notes information");
 		return;
 	}
-	DBG_HEX(lTableSize);
-	if (lTableSize < MIN_SIZE_FOR_BBD_USE) {
+	NO_DBG_HEX(ulTableSize);
+	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
 	  	/* Use the Small Block Depot */
-		aiBlockDepot = aiSBD;
+		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
 		tBlockSize = SMALL_BLOCK_SIZE;
 	} else {
 	  	/* Use the Big Block Depot */
-		aiBlockDepot = aiBBD;
+		aulBlockDepot = aulBBD;
 		tBlockDepotLen = tBBDLen;
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tEndnoteInfoLen);
-	if (!bReadBuffer(pFile, iTableStartBlock,
-			aiBlockDepot, tBlockDepotLen, tBlockSize,
-			aucBuffer, tBeginEndnoteInfo, tEndnoteInfoLen)) {
+	if (!bReadBuffer(pFile, ulTableStartBlock,
+			aulBlockDepot, tBlockDepotLen, tBlockSize,
+			aucBuffer, ulBeginEndnoteInfo, tEndnoteInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
 		return;
 	}
-	DBG_PRINT_BLOCK(aucBuffer, tEndnoteInfoLen);
+	NO_DBG_PRINT_BLOCK(aucBuffer, tEndnoteInfoLen);
 
 	fail(tEndnoteListLength != 0);
 	tEndnoteListLength = (tEndnoteInfoLen - 4) / 6;
 	fail(tEndnoteListLength == 0);
 
-	fail(alEndnoteList != NULL);
-	alEndnoteList = xmalloc(sizeof(long) * tEndnoteListLength);
+	fail(aulEndnoteList != NULL);
+	aulEndnoteList = xcalloc(tEndnoteListLength, sizeof(ULONG));
 
 	for (iIndex = 0; iIndex < (int)tEndnoteListLength; iIndex++) {
-		lOffset = (long)ulGetLong(iIndex * 4, aucBuffer);
-		DBG_HEX(lOffset);
-		lFileOffset = lTextOffset2FileOffset(lBeginOfText + lOffset);
-		DBG_HEX(lFileOffset);
-		alEndnoteList[iIndex] = lFileOffset;
+		ulOffset = ulGetLong(iIndex * 4, aucBuffer);
+		NO_DBG_HEX(ulOffset);
+		ulFileOffset = ulCharPos2FileOffset(ulBeginOfText + ulOffset);
+		NO_DBG_HEX(ulFileOffset);
+		aulEndnoteList[iIndex] = ulFileOffset;
 	}
 	aucBuffer = xfree(aucBuffer);
 } /* end of vGet8EndnotesInfo */
 
 /*
- * Build the lists with footnote and endnote information for Word 8/97 files
+ * Build the lists with footnote and endnote information for Word 8/9/10 files
  */
 static void
 vGet8NotesInfo(FILE *pFile, const pps_info_type *pPPS,
-	const int *aiBBD, size_t tBBDLen, const int *aiSBD, size_t tSBDLen,
-	const unsigned char *aucHeader)
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader)
 {
 	vGet8FootnotesInfo(pFile, pPPS,
-			aiBBD, tBBDLen, aiSBD, tSBDLen, aucHeader);
+			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 	vGet8EndnotesInfo(pFile, pPPS,
-			aiBBD, tBBDLen, aiSBD, tSBDLen, aucHeader);
+			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 } /* end of vGet8NotesInfo */
 
 /*
@@ -336,22 +336,23 @@ vGet8NotesInfo(FILE *pFile, const pps_info_type *pPPS,
  */
 void
 vGetNotesInfo(FILE *pFile, const pps_info_type *pPPS,
-	const int *aiBBD, size_t tBBDLen, const int *aiSBD, size_t tSBDLen,
-	const unsigned char *aucHeader, int iWordVersion)
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader, int iWordVersion)
 {
 	fail(pFile == NULL || pPPS == NULL || aucHeader == NULL);
 	fail(iWordVersion < 6 || iWordVersion > 8);
-	fail(aiBBD == NULL || aiSBD == NULL);
+	fail(aulBBD == NULL || aulSBD == NULL);
 
 	switch (iWordVersion) {
 	case 6:
 	case 7:
-		vGet6NotesInfo(pFile, pPPS->tWordDocument.iSb,
-			aiBBD, tBBDLen, aucHeader);
+		vGet6NotesInfo(pFile, pPPS->tWordDocument.ulSB,
+			aulBBD, tBBDLen, aucHeader);
 		break;
 	case 8:
 		vGet8NotesInfo(pFile, pPPS,
-			aiBBD, tBBDLen, aiSBD, tSBDLen, aucHeader);
+			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 		break;
 	default:
 		werr(0, "Sorry, no notes information");
@@ -363,14 +364,14 @@ vGetNotesInfo(FILE *pFile, const pps_info_type *pPPS,
  * Get the notetype of the note at the given fileoffset
  */
 notetype_enum
-eGetNotetype(long lFileOffset)
+eGetNotetype(ULONG ulFileOffset)
 {
-	int	iIndex;
+	size_t	tIndex;
 
-	fail(alFootnoteList == NULL && tFootnoteListLength != 0);
-	fail(alEndnoteList == NULL && tEndnoteListLength != 0);
+	fail(aulFootnoteList == NULL && tFootnoteListLength != 0);
+	fail(aulEndnoteList == NULL && tEndnoteListLength != 0);
 
-	/* Go for the easy answer first */
+	/* Go for the easy answers first */
 	if (tFootnoteListLength == 0 && tEndnoteListLength == 0) {
 		return notetype_is_unknown;
 	}
@@ -381,13 +382,13 @@ eGetNotetype(long lFileOffset)
 		return notetype_is_endnote;
 	}
 	/* No easy answer, so we search */
-	for (iIndex = 0; iIndex < (int)tFootnoteListLength; iIndex++) {
-		if (alFootnoteList[iIndex] == lFileOffset) {
+	for (tIndex = 0; tIndex < tFootnoteListLength; tIndex++) {
+		if (aulFootnoteList[tIndex] == ulFileOffset) {
 			return notetype_is_footnote;
 		}
 	}
-	for (iIndex = 0; iIndex < (int)tEndnoteListLength; iIndex++) {
-		if (alEndnoteList[iIndex] == lFileOffset) {
+	for (tIndex = 0; tIndex < tEndnoteListLength; tIndex++) {
+		if (aulEndnoteList[tIndex] == ulFileOffset) {
 			return notetype_is_endnote;
 		}
 	}

@@ -1,6 +1,6 @@
 /*
  * png2eps.c
- * Copyright (C) 2000 A.J. van Os; Released under GPL
+ * Copyright (C) 2000-2002 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to translate png images into eps
@@ -17,62 +17,57 @@ static int	iPicCounter = 0;
 
 
 /*
- * iSkipToData - skip until a IDAT chunk is found
+ * tSkipToData - skip until a IDAT chunk is found
  *
  * returns the length of the pixeldata or -1 in case of error
  */
-static int
-iSkipToData(FILE *pFile, int iMaxBytes, int *piSkipped)
+static size_t
+tSkipToData(FILE *pFile, size_t tMaxBytes, size_t *ptSkipped)
 {
-	unsigned long	ulName, ulTmp;
-	int	iDataLength, iCounter, iToSkip;
+	ULONG	ulName, ulTmp;
+	size_t	tDataLength, tToSkip;
+	int	iCounter;
 
 	fail(pFile == NULL);
-	fail(iMaxBytes < 0);
-	fail(piSkipped == NULL);
-	fail(*piSkipped < 0);
+	fail(ptSkipped == NULL);
 
 	/* Examine chunks */
-	while (*piSkipped + 8 < iMaxBytes) {
-		iDataLength = (int)ulNextLongBE(pFile);
-		if (iDataLength < 0) {
-			DBG_DEC(iDataLength);
-			return -1;
-		}
-		DBG_DEC(iDataLength);
-		*piSkipped += 4;
+	while (*ptSkipped + 8 < tMaxBytes) {
+		tDataLength = (size_t)ulNextLongBE(pFile);
+		DBG_DEC(tDataLength);
+		*ptSkipped += 4;
 
 		ulName = 0x00;
 		for (iCounter = 0; iCounter < 4; iCounter++) {
-			ulTmp = (unsigned long)iNextByte(pFile);
+			ulTmp = (ULONG)iNextByte(pFile);
 			if (!isalpha((int)ulTmp)) {
 				DBG_HEX(ulTmp);
-				return -1;
+				return (size_t)-1;
 			}
 			ulName <<= 8;
 			ulName |= ulTmp;
 		}
 		DBG_HEX(ulName);
-		*piSkipped += 4;
+		*ptSkipped += 4;
 
 		if (ulName == PNG_CN_IEND) {
 			break;
 		}
 		if (ulName == PNG_CN_IDAT) {
-			return iDataLength;
+			return tDataLength;
 		}
 
-		iToSkip = iDataLength + 4;
-		if (iToSkip >= iMaxBytes - *piSkipped) {
-			DBG_DEC(iToSkip);
-			DBG_DEC(iMaxBytes - *piSkipped);
-			return -1;
+		tToSkip = tDataLength + 4;
+		if (tToSkip >= tMaxBytes - *ptSkipped) {
+			DBG_DEC(tToSkip);
+			DBG_DEC(tMaxBytes - *ptSkipped);
+			return (size_t)-1;
 		}
-		(void)iSkipBytes(pFile, (size_t)iToSkip);
-		*piSkipped += iToSkip;
+		(void)tSkipBytes(pFile, tToSkip);
+		*ptSkipped += tToSkip;
 	}
 
-	return -1;
+	return (size_t)-1;
 } /* end of iSkipToData */
 
 /*
@@ -80,61 +75,62 @@ iSkipToData(FILE *pFile, int iMaxBytes, int *piSkipped)
  *
  * returns the length of the pixeldata or -1 in case of error
  */
-static int
-iFindFirstPixelData(FILE *pFile, int iMaxBytes, int *piSkipped)
+static size_t
+tFindFirstPixelData(FILE *pFile, size_t tMaxBytes, size_t *ptSkipped)
 {
 	fail(pFile == NULL);
-	fail(iMaxBytes <= 0);
-	fail(piSkipped == NULL);
+	fail(tMaxBytes == 0);
+	fail(ptSkipped == NULL);
 
-	if (iMaxBytes < 8) {
-		DBG_DEC(iMaxBytes);
-		return -1;
+	if (tMaxBytes < 8) {
+		DBG_DEC(tMaxBytes);
+		return (size_t)-1;
 	}
 
 	/* Skip over the PNG signature */
-	(void)iSkipBytes(pFile, 8);
-	*piSkipped = 8;
+	(void)tSkipBytes(pFile, 8);
+	*ptSkipped = 8;
 
-	return iSkipToData(pFile, iMaxBytes, piSkipped);
+	return tSkipToData(pFile, tMaxBytes, ptSkipped);
 } /* end of iFindFirstPixelData */
 
 /*
- * iFindNextPixelData - find the next pixeldata if a PNG image
+ * tFindNextPixelData - find the next pixeldata if a PNG image
  *
  * returns the length of the pixeldata or -1 in case of error
  */
-static int
-iFindNextPixelData(FILE *pFile, int iMaxBytes, int *piSkipped)
+static size_t
+tFindNextPixelData(FILE *pFile, size_t tMaxBytes, size_t *ptSkipped)
 {
 	fail(pFile == NULL);
-	fail(iMaxBytes <= 0);
-	fail(piSkipped == NULL);
+	fail(tMaxBytes == 0);
+	fail(ptSkipped == NULL);
 
-	if (iMaxBytes < 4) {
-		DBG_DEC(iMaxBytes);
-		return -1;
+	if (tMaxBytes < 4) {
+		DBG_DEC(tMaxBytes);
+		return (size_t)-1;
 	}
 
 	/* Skip over the crc */
-	(void)iSkipBytes(pFile, 4);
-	*piSkipped = 4;
+	(void)tSkipBytes(pFile, 4);
+	*ptSkipped = 4;
 
-	return iSkipToData(pFile, iMaxBytes, piSkipped);
-} /* end of iFindNextPixelData */
+	return tSkipToData(pFile, tMaxBytes, ptSkipped);
+} /* end of tFindNextPixelData */
 
 #if defined(DEBUG)
 /*
  * vCopy2File
  */
 static void
-vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
+vCopy2File(FILE *pFile, ULONG ulFileOffset, size_t tPictureLen)
 {
 	FILE	*pOutFile;
-	int	iIndex, iTmp;
+	size_t	tIndex;
+	int	iTmp;
 	char	szFilename[30];
 
-	if (!bSetDataOffset(pFile, lFileOffset)) {
+	if (!bSetDataOffset(pFile, ulFileOffset)) {
 		return;
 	}
 
@@ -143,7 +139,7 @@ vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
 	if (pOutFile == NULL) {
 		return;
 	}
-	for (iIndex = 0; iIndex < iPictureLen; iIndex++) {
+	for (tIndex = 0; tIndex < tPictureLen; tIndex++) {
 		iTmp = iNextByte(pFile);
 		if (putc(iTmp, pOutFile) == EOF) {
 			break;
@@ -162,32 +158,32 @@ vCopy2File(FILE *pFile, long lFileOffset, int iPictureLen)
  */
 BOOL
 bTranslatePNG(diagram_type *pDiag, FILE *pFile,
-	long lFileOffset, int iPictureLen, const imagedata_type *pImg)
+	ULONG ulFileOffset, size_t tPictureLen, const imagedata_type *pImg)
 {
-	int	iMaxBytes, iDataLength, iSkipped;
+	size_t	tMaxBytes, tDataLength, tSkipped;
 
 #if defined(DEBUG)
-	vCopy2File(pFile, lFileOffset, iPictureLen);
+	vCopy2File(pFile, ulFileOffset, tPictureLen);
 #endif /* DEBUG */
 
 	/* Seek to start position of PNG data */
-	if (!bSetDataOffset(pFile, lFileOffset)) {
+	if (!bSetDataOffset(pFile, ulFileOffset)) {
 		return FALSE;
 	}
 
-	iMaxBytes = iPictureLen;
-	iDataLength = iFindFirstPixelData(pFile, iMaxBytes, &iSkipped);
-	if (iDataLength < 0) {
+	tMaxBytes = tPictureLen;
+	tDataLength = tFindFirstPixelData(pFile, tMaxBytes, &tSkipped);
+	if (tDataLength == (size_t)-1) {
 		return FALSE;
 	}
 
 	vImagePrologue(pDiag, pImg);
 	do {
-		iMaxBytes -= iSkipped;
-		vASCII85EncodeArray(pFile, pDiag->pOutFile, iDataLength);
-		iMaxBytes -= iDataLength;
-		iDataLength = iFindNextPixelData(pFile, iMaxBytes, &iSkipped);
-	} while (iDataLength >= 0);
+		tMaxBytes -= tSkipped;
+		vASCII85EncodeArray(pFile, pDiag->pOutFile, tDataLength);
+		tMaxBytes -= tDataLength;
+		tDataLength = tFindNextPixelData(pFile, tMaxBytes, &tSkipped);
+	} while (tDataLength != (size_t)-1);
 	vASCII85EncodeByte(pDiag->pOutFile, EOF);
 	vImageEpilogue(pDiag);
 

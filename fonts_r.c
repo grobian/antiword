@@ -1,6 +1,6 @@
 /*
  * fonts_r.c
- * Copyright (C) 1999,2000 A.J. van Os; Released under GPL
+ * Copyright (C) 1999-2002 A.J. van Os; Released under GPL
  *
  * Description:
  * Functions to deal with fonts (RiscOs version)
@@ -108,12 +108,12 @@ vCloseFont(void)
 } /* end of vCloseFont */
 
 /*
- * tOpenFont - make the given font the current font
+ * tOpenFont - make the specified font the current font
  *
  * Returns the font reference number for use in a draw file
  */
 draw_fontref
-tOpenFont(int iWordFontNumber, unsigned char ucFontstyle, int iWordFontsize)
+tOpenFont(UCHAR ucWordFontNumber, USHORT usFontStyle, USHORT usWordFontSize)
 {
 	os_error	*e;
 	const char	*szOurFontname;
@@ -121,15 +121,15 @@ tOpenFont(int iWordFontNumber, unsigned char ucFontstyle, int iWordFontsize)
 	int	iFontnumber;
 
 	NO_DBG_MSG("tOpenFont");
-	NO_DBG_DEC(iWordFontNumber);
-	NO_DBG_HEX(ucFontstyle);
-	NO_DBG_DEC(iWordFontsize);
+	NO_DBG_DEC(ucWordFontNumber);
+	NO_DBG_HEX(usFontStyle);
+	NO_DBG_DEC(usWordFontSize);
 
 	/* Keep the relevant bits */
-	ucFontstyle &= FONT_BOLD|FONT_ITALIC;
-	NO_DBG_HEX(ucFontstyle);
+	usFontStyle &= FONT_BOLD|FONT_ITALIC;
+	NO_DBG_HEX(usFontStyle);
 
-	iFontnumber = iGetFontByNumber(iWordFontNumber, ucFontstyle);
+	iFontnumber = iGetFontByNumber(ucWordFontNumber, usFontStyle);
 	szOurFontname = szGetOurFontname(iFontnumber);
 	if (szOurFontname == NULL || szOurFontname[0] == '\0') {
 		tFontCurr = (font)-1;
@@ -137,7 +137,7 @@ tOpenFont(int iWordFontNumber, unsigned char ucFontstyle, int iWordFontsize)
 	}
 	NO_DBG_MSG(szOurFontname);
 	e = font_find((char *)szOurFontname,
-			iWordFontsize * 8, iWordFontsize * 8,
+			(int)usWordFontSize * 8, (int)usWordFontSize * 8,
 			0, 0, &tFont);
 	if (e != NULL) {
 		switch (e->errnum) {
@@ -163,62 +163,87 @@ tOpenFont(int iWordFontNumber, unsigned char ucFontstyle, int iWordFontsize)
  * Returns the font reference number for use in a draw file
  */
 draw_fontref
-tOpenTableFont(int iWordFontsize)
+tOpenTableFont(USHORT usWordFontSize)
 {
 	int	iWordFontnumber;
 
 	NO_DBG_MSG("tOpenTableFont");
 
 	iWordFontnumber = iFontname2Fontnumber(TABLE_FONT, FONT_REGULAR);
-	if (iWordFontnumber < 0 || iWordFontnumber > UCHAR_MAX) {
+	if (iWordFontnumber < 0 || iWordFontnumber > (int)UCHAR_MAX) {
 		DBG_DEC(iWordFontnumber);
 		tFontCurr = (font)-1;
 		return (draw_fontref)0;
 	}
 
-	return tOpenFont(iWordFontnumber, FONT_REGULAR, iWordFontsize);
+	return tOpenFont((UCHAR)iWordFontnumber, FONT_REGULAR, usWordFontSize);
 } /* end of tOpenTableFont */
 
 /*
  * lComputeStringWidth - compute the string width
  *
- * Returns string width in millipoints
+ * Returns the string width in millipoints
  */
 long
-lComputeStringWidth(char *szString, int iStringLength,
-		draw_fontref tFontRef, int iFontsize)
+lComputeStringWidth(const char *szString, size_t tStringLength,
+		draw_fontref tFontRef, USHORT usFontSize)
 {
 	font_string	tStr;
 	os_error	*e;
 
-	fail(szString == NULL || iStringLength < 0);
-	fail(iFontsize < MIN_FONT_SIZE || iFontsize > MAX_FONT_SIZE);
+	fail(szString == NULL);
+	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
 
-	if (szString[0] == '\0' || iStringLength <= 0) {
+	if (szString[0] == '\0' || tStringLength == 0) {
 		/* Empty string */
 		return 0;
 	}
-	if (iStringLength == 1 && szString[0] == TABLE_SEPARATOR) {
+	if (tStringLength == 1 && szString[0] == TABLE_SEPARATOR) {
 		/* Font_strwidth doesn't like control characters */
 		return 0;
 	}
 	if (tFontCurr == (font)-1) {
 		/* No current font, use systemfont */
-		return lChar2MilliPoints(iStringLength);
+		return lChar2MilliPoints(tStringLength);
 	}
-	tStr.s = szString;
+	tStr.s = (char *)szString;
 	tStr.x = INT_MAX;
 	tStr.y = INT_MAX;
 	tStr.split = -1;
-	tStr.term = iStringLength;
+	tStr.term = tStringLength;
 	e = font_strwidth(&tStr);
 	if (e == NULL) {
 		return (long)tStr.x;
 	}
 	DBG_DEC(e->errnum);
 	DBG_MSG(e->errmess);
-	DBG_DEC(iStringLength);
+	DBG_DEC(tStringLength);
 	DBG_MSG(szString);
 	werr(0, "String width error %d: %s", e->errnum, e->errmess);
-	return lChar2MilliPoints(iStringLength);
+	return lChar2MilliPoints(tStringLength);
 } /* end of lComputeStringWidth */
+
+/*
+ * tCountColumns - count the number of columns in a string
+ *
+ * Returns the number of columns
+ */
+size_t
+tCountColumns(const char *szString, size_t tLength)
+{
+	fail(szString == NULL);
+
+	/* One byte, one character, one column */
+	return tLength;
+} /* end of tCountColumns */
+
+/*
+ * tGetCharacterLength - the length of the specified character in bytes
+ *
+ * Returns the length in bytes
+ */
+size_t
+tGetCharacterLength(const char *szString)
+{
+	return 1;
+} /* end of tGetCharacterLength */
