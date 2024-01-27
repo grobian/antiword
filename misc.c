@@ -1,6 +1,6 @@
 /*
  * misc.c
- * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1998-2005 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Miscellaneous functions
@@ -12,8 +12,7 @@
 #include <ctype.h>
 #include <time.h>
 #if defined(__riscos)
-#include "kernel.h"
-#include "swis.h"
+#include "DeskLib:SWI.h"
 #else
 #include <errno.h>
 #include <sys/types.h>
@@ -79,23 +78,22 @@ long
 lGetFilesize(const char *szFilename)
 {
 #if defined(__riscos)
-	_kernel_swi_regs	regs;
-	_kernel_oserror		*e;
+	os_error	*e;
+	int	iType, iSize;
 
-	(void)memset(&regs, 0, sizeof(regs));
-	regs.r[0] = 17;
-	regs.r[1] = (int)szFilename;
-	e = _kernel_swi(OS_File, &regs, &regs);
+	e = SWI(2, 5, SWI_OS_File | XOS_Bit,
+		17, szFilename,
+		&iType, NULL, NULL, NULL, &iSize);
 	if (e != NULL) {
 		werr(0, "Get Filesize error %d: %s",
 			e->errnum, e->errmess);
 		return -1;
 	}
-	if (regs.r[0] != 1) {
+	if (iType != 1) {
 		/* It's not a proper file or the file does not exist */
 		return -1;
 	}
-	return (long)regs.r[4];
+	return (long)iSize;
 #else
 	struct stat	tBuffer;
 
@@ -645,6 +643,7 @@ bAllZero(const UCHAR *aucBytes, size_t tLength)
 	return TRUE;
 } /* end of bAllZero */
 
+#if !defined(__riscos)
 /*
  * GetCodesetFromLocale - get the codeset from the current locale
  *
@@ -865,3 +864,31 @@ szGetDefaultMappingFile(void)
 	return MAPPING_FILE_8859_1;
 #endif /* __dos */
 } /* end of szGetDefaultMappingFile */
+#endif /* !__riscos */
+
+/*
+ * tConvertDTTM - convert Windows Date and Time format
+ *
+ * returns Unix time_t or -1
+ */
+time_t
+tConvertDTTM(ULONG ulDTTM)
+{
+	struct tm	tTime;
+	time_t		tResult;
+
+	if (ulDTTM == 0) {
+		return (time_t)-1;
+	}
+	memset(&tTime, 0, sizeof(tTime));
+	tTime.tm_min = (int)(ulDTTM & 0x0000003f);
+	tTime.tm_hour = (int)((ulDTTM & 0x000007c0) >> 6);
+	tTime.tm_mday = (int)((ulDTTM & 0x0000f800) >> 11);
+	tTime.tm_mon = (int)((ulDTTM & 0x000f0000) >> 16);
+	tTime.tm_year = (int)((ulDTTM & 0x1ff00000) >> 20);
+	tTime.tm_isdst = -1;
+	tTime.tm_mon--;         /* From 01-12 to 00-11 */
+	tResult = mktime(&tTime);
+	NO_DBG_MSG(ctime(&tResult));
+	return tResult;
+} /* end of tConvertDTTM */

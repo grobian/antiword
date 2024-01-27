@@ -1008,7 +1008,7 @@ vCorrectFontTable(conversion_type eConversionType, encoding_type eEncoding)
  * Returns the space width in millipoints
  */
 long
-lComputeSpaceWidth(draw_fontref tFontRef, USHORT usFontSize)
+lComputeSpaceWidth(drawfile_fontref tFontRef, USHORT usFontSize)
 {
 	char	szSpace[] = " ";
 

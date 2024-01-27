@@ -196,6 +196,7 @@ vSetDefaultTabWidth(FILE *pFile, const pps_info_type *pPPS,
 	}
 } /* end of vSetDefaultTabWidth */
 
+#if 0
 /*
  * lGetDefaultTabWidth - Get the default tabwidth in millipoints
  */
@@ -208,3 +209,4 @@ lGetDefaultTabWidth(void)
 	}
 	return lDefaultTabWidth;
 } /* end of lGetDefaultTabWidth */
+#endif

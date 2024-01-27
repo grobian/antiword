@@ -1,4 +1,3 @@
-#!/bin/bash
 #!/bin/sh
 #
 # Script to make drag and drop in KDE possible

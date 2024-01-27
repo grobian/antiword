@@ -1,10 +1,17 @@
 ****************************************************************************
-* Changes in Antiword from versions 0.22 to 0.36                           *
+* Changes in Antiword from versions 0.22 to 0.37                           *
 ****************************************************************************
 
-Changes 0.36 to 0.36.1
+Changes 0.36 to 0.37
+--------------------
 Bug fixes:
-- Bug removed from file misc.c line 788
+- Bug reported by Suzanne Skinner <tril@igs.net> (and others) fixed
+New features:
+- XML/DocBook output now contains <footnote> tags
+- Antiword is now based on DeskLib instead of RISC_OSLib (RISC OS only)
+- Show page headers and footers (PostScript and PDF output only)
+- Show text that was removed by the revisioning system
+- Improved kantiword, based on information from Stefan Wiens <s.wi@gmx.net>
 
 Changes 0.35 to 0.36
 --------------------

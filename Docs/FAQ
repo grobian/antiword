@@ -70,6 +70,7 @@ A9: The correct mapping file depends on the character set you need for output
     For Ukrainian use koi8-u.txt.
     For Arabic use 8859-6.txt. (DOS: cp864.txt)
     For Hebrew use 8859-8.txt. (DOS: cp862.txt)
+    For Thai use 8859-11.txt.
     If your system supports it, you might also try UTF-8.txt.
 
     NOTE: UTF-8 also enables Antiword to show text in languages like Chinese,

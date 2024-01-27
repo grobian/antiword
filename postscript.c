@@ -1,6 +1,6 @@
 /*
  * postscript.c
- * Copyright (C) 1999-2004 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1999-2005 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Functions to deal with the PostScript format
@@ -29,12 +29,16 @@ static BOOL		bUseLandscape = FALSE;
 /* The height and width of a PostScript page (in DrawUnits) */
 static long		lPageHeight = LONG_MAX;
 static long		lPageWidth = LONG_MAX;
+/* The height of the footer on the current page (in DrawUnits) */
+static long		lFooterHeight = 0;
+/* Inside a footer (to prevent an infinite loop when the footer is too big) */
+static BOOL		bInFtrSpace = FALSE;
 /* Current time for a PS header */
 static const char	*szCreationDate = NULL;
 /* Current creator for a PS header */
 static const char	*szCreator = NULL;
 /* Current font information */
-static draw_fontref	tFontRefCurr = (draw_fontref)-1;
+static drawfile_fontref	tFontRefCurr = (drawfile_fontref)-1;
 static USHORT		usFontSizeCurr = 0;
 static int		iFontColorCurr = -1;
 /* Current vertical position information */
@@ -43,6 +47,12 @@ static long		lYtopCurr = -1;
 static int		iPageCount = 0;
 /* Image counter */
 static int		iImageCount = 0;
+/* Section index */
+static int		iSectionIndex = 0;
+/* Are we on the first page of the section? */
+static BOOL		bFirstInSection = TRUE;
+
+static void		vMoveTo(diagram_type *, long);
 
 static const char *iso_8859_1_data[] = {
 "/newcodes	% ISO-8859-1 character encodings",
@@ -220,19 +230,198 @@ vAddPageSetup(FILE *pOutFile)
 } /* end of vAddPageSetup */
 
 /*
+ * vAddHdrFtr - add a header or footer
+ */
+static void
+vAddHdrFtr(diagram_type *pDiag, const hdrftr_block_type *pHdrFtrInfo)
+{
+	output_type	*pStart, *pPrev, *pNext;
+
+	fail(pDiag == NULL);
+	fail(pHdrFtrInfo == NULL);
+
+	vStartOfParagraphPS(pDiag, 0);
+	pStart = pHdrFtrInfo->pText;
+	while (pStart != NULL) {
+		pNext = pStart;
+		while (pNext != NULL &&
+		       (pNext->tNextFree != 1 ||
+		        (pNext->szStorage[0] != PAR_END &&
+		         pNext->szStorage[0] != HARD_RETURN))) {
+			pNext = pNext->pNext;
+		}
+		if (pNext == NULL) {
+			if (bOutputContainsText(pStart)) {
+				vAlign2Window(pDiag, pStart,
+					lChar2MilliPoints(DEFAULT_SCREEN_WIDTH),
+					ALIGNMENT_LEFT);
+			} else {
+				vMove2NextLinePS(pDiag, pStart->usFontSize);
+			}
+			break;
+		}
+		fail(pNext->tNextFree != 1);
+		fail(pNext->szStorage[0] != PAR_END &&
+			pNext->szStorage[0] != HARD_RETURN);
+
+		if (pStart != pNext) {
+			/* There is something to print */
+			pPrev = pNext->pPrev;
+			fail(pPrev->pNext != pNext);
+			/* Cut the chain */
+			pPrev->pNext = NULL;
+			if (bOutputContainsText(pStart)) {
+				/* Print it */
+				vAlign2Window(pDiag, pStart,
+					lChar2MilliPoints(DEFAULT_SCREEN_WIDTH),
+					ALIGNMENT_LEFT);
+			} else {
+				/* Just an empty line */
+				vMove2NextLinePS(pDiag, pStart->usFontSize);
+			}
+			/* Repair the chain */
+			pPrev->pNext = pNext;
+		}
+		if (pNext->szStorage[0] == PAR_END) {
+			vEndOfParagraphPS(pDiag, pNext->usFontSize,
+					(long)pNext->usFontSize * 200);
+		}
+		pStart = pNext->pNext;
+	}
+} /* end of vAddHdrFtr */
+
+/*
+ * vAddHeader - add a page header
+ */
+static void
+vAddHeader(diagram_type *pDiag)
+{
+	const hdrftr_block_type	*pHdrInfo;
+	const hdrftr_block_type	*pFtrInfo;
+
+	fail(pDiag == NULL);
+
+	NO_DBG_MSG("vAddHeader");
+
+	pHdrInfo = pGetHdrFtrInfo(iSectionIndex, TRUE,
+					odd(iPageCount), bFirstInSection);
+	pFtrInfo = pGetHdrFtrInfo(iSectionIndex, FALSE,
+					odd(iPageCount), bFirstInSection);
+	/* Set the height of the footer of this page */
+	lFooterHeight = pFtrInfo == NULL ? 0 : pFtrInfo->lHeight;
+	fail(lFooterHeight < 0);
+
+	if (pHdrInfo == NULL ||
+	    pHdrInfo->pText == NULL ||
+	    pHdrInfo->lHeight <= 0) {
+		fail(pHdrInfo != NULL && pHdrInfo->lHeight < 0);
+		fail(pHdrInfo != NULL &&
+			pHdrInfo->pText != NULL &&
+			pHdrInfo->lHeight == 0);
+		return;
+	}
+
+	vAddHdrFtr(pDiag, pHdrInfo);
+
+	DBG_DEC_C(pHdrInfo->lHeight !=
+		lPageHeight - PS_TOP_MARGIN - pDiag->lYtop,
+		pHdrInfo->lHeight);
+	DBG_DEC_C(pHdrInfo->lHeight !=
+		lPageHeight - PS_TOP_MARGIN - pDiag->lYtop,
+		lPageHeight - PS_TOP_MARGIN - pDiag->lYtop);
+
+#if 0 /* defined(DEBUG) */
+	fprintf(pDiag->pOutFile,
+	"(HEADER: FileOffset 0x%04lx-0x%04lx; Height %ld-%ld) show\n",
+		ulCharPos2FileOffset(pHdrInfo->ulCharPosStart),
+		ulCharPos2FileOffset(pHdrInfo->ulCharPosNext),
+		pHdrInfo->lHeight,
+		lPageHeight - PS_TOP_MARGIN - pDiag->lYtop);
+#endif
+} /* end of vAddHeader */
+
+/*
+ * vAddFooter - add a page footer
+ */
+static void
+vAddFooter(diagram_type *pDiag)
+{
+	const hdrftr_block_type	*pFtrInfo;
+
+	fail(pDiag == NULL);
+
+	NO_DBG_MSG("vAddFooter");
+	pFtrInfo = pGetHdrFtrInfo(iSectionIndex, FALSE,
+					odd(iPageCount), bFirstInSection);
+	bFirstInSection = FALSE;
+	if (pFtrInfo == NULL ||
+	    pFtrInfo->pText == NULL ||
+	    pFtrInfo->lHeight <= 0) {
+		fail(pFtrInfo != NULL && pFtrInfo->lHeight < 0);
+		fail(pFtrInfo != NULL &&
+			pFtrInfo->pText != NULL &&
+			pFtrInfo->lHeight == 0);
+		return;
+	}
+
+	bInFtrSpace = TRUE;
+
+	DBG_DEC_C(pFtrInfo->lHeight != lFooterHeight, pFtrInfo->lHeight);
+	DBG_DEC_C(pFtrInfo->lHeight != lFooterHeight, lFooterHeight);
+	DBG_DEC_C(pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN,
+			pDiag->lYtop);
+	DBG_DEC_C(pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN,
+			lFooterHeight + PS_BOTTOM_MARGIN);
+
+	if (pDiag->lYtop > lFooterHeight + PS_BOTTOM_MARGIN) {
+		/* Move down to the start of the footer */
+		pDiag->lYtop = lFooterHeight + PS_BOTTOM_MARGIN;
+		vMoveTo(pDiag, 0);
+	} else if (pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN / 2) {
+		DBG_FIXME();
+		/*
+		 * Move up to the start of the footer, to prevent moving
+		 * of the bottom edge of the paper
+		 */
+		pDiag->lYtop = lFooterHeight + PS_BOTTOM_MARGIN;
+		vMoveTo(pDiag, 0);
+	}
+
+	DBG_FLT_C(pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN,
+	dDrawUnits2Points(lFooterHeight + PS_BOTTOM_MARGIN - pDiag->lYtop));
+
+#if 0 /* defined(DEBUG) */
+	fprintf(pDiag->pOutFile,
+	"(FOOTER: FileOffset 0x%04lx-0x%04lx; Bottom %ld-%ld) show\n",
+		ulCharPos2FileOffset(pFtrInfo->ulCharPosStart),
+		ulCharPos2FileOffset(pFtrInfo->ulCharPosNext),
+		pDiag->lYtop,
+		pFtrInfo->lHeight + PS_BOTTOM_MARGIN);
+#endif
+	vAddHdrFtr(pDiag, pFtrInfo);
+	bInFtrSpace = FALSE;
+} /* end of vAddFooter */
+
+/*
  * vMove2NextPage - move to the start of the next page
  */
 static void
-vMove2NextPage(diagram_type *pDiag)
+vMove2NextPage(diagram_type *pDiag, BOOL bNewSection)
 {
 	fail(pDiag == NULL);
 
+	vAddFooter(pDiag);
 	fprintf(pDiag->pOutFile, "showpage\n");
 	iPageCount++;
 	fprintf(pDiag->pOutFile, "%%%%Page: %d %d\n", iPageCount, iPageCount);
+	if (bNewSection) {
+		iSectionIndex++;
+		bFirstInSection = TRUE;
+	}
 	vAddPageSetup(pDiag->pOutFile);
 	pDiag->lYtop = lPageHeight - PS_TOP_MARGIN;
 	lYtopCurr = -1;
+	vAddHeader(pDiag);
 } /* end of vMove2NextPage */
 
 /*
@@ -247,12 +436,15 @@ vMoveTo(diagram_type *pDiag, long lLastVerticalMovement)
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
 
-	if (pDiag->lYtop < PS_BOTTOM_MARGIN) {
-		vMove2NextPage(pDiag);
+	if (pDiag->lYtop <= lFooterHeight + PS_BOTTOM_MARGIN && !bInFtrSpace) {
+		vMove2NextPage(pDiag, FALSE);
 		/* Repeat the last vertical movement on the new page */
 		pDiag->lYtop -= lLastVerticalMovement;
 	}
-	fail(pDiag->lYtop < PS_BOTTOM_MARGIN);
+
+	fail(pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN && !bInFtrSpace);
+	DBG_DEC_C(pDiag->lYtop < PS_BOTTOM_MARGIN, pDiag->lYtop);
+	fail(pDiag->lYtop < PS_BOTTOM_MARGIN / 3);
 
 	if (pDiag->lYtop != lYtopCurr) {
 		fprintf(pDiag->pOutFile, "%.2f %.2f moveto\n",
@@ -297,12 +489,17 @@ vProloguePS(diagram_type *pDiag,
 		lPageWidth = lPoints2DrawUnits(pOptions->iPageWidth);
 	}
 	DBG_DEC(lPageWidth);
-	tFontRefCurr = (draw_fontref)-1;
+	lFooterHeight = 0;
+	bInFtrSpace = FALSE;
+
+	tFontRefCurr = (drawfile_fontref)-1;
 	usFontSizeCurr = 0;
 	iFontColorCurr = -1;
 	lYtopCurr = -1;
-	iImageCount = 0;
 	iPageCount = 0;
+	iImageCount = 0;
+	iSectionIndex = 0;
+	bFirstInSection = TRUE;
 	pDiag->lXleft = 0;
 	pDiag->lYtop = lPageHeight - PS_TOP_MARGIN;
 
@@ -353,6 +550,7 @@ vEpiloguePS(diagram_type *pDiag)
 	fail(pDiag->pOutFile == NULL);
 
 	if (pDiag->lYtop < lPageHeight - PS_TOP_MARGIN) {
+		vAddFooter(pDiag);
 		fprintf(pDiag->pOutFile, "showpage\n");
 	}
 	fprintf(pDiag->pOutFile, "%%%%Trailer\n");
@@ -773,6 +971,7 @@ vAddFontsPS(diagram_type *pDiag)
 	iPageCount = 1;
 	fprintf(pDiag->pOutFile, "%%%%Page: %d %d\n", iPageCount, iPageCount);
 	vAddPageSetup(pDiag->pOutFile);
+	vAddHeader(pDiag);
 } /* end of vAddFontsPS */
 
 /*
@@ -892,7 +1091,7 @@ vMove2NextLinePS(diagram_type *pDiag, USHORT usFontSize)
 void
 vSubstringPS(diagram_type *pDiag,
 	char *szString, size_t tStringLength, long lStringWidth,
-	UCHAR ucFontColor, USHORT usFontstyle, draw_fontref tFontRef,
+	UCHAR ucFontColor, USHORT usFontstyle, drawfile_fontref tFontRef,
 	USHORT usFontSize, USHORT usMaxFontSize)
 {
 	const char	*szOurFontname;
@@ -946,7 +1145,7 @@ vStartOfParagraphPS(diagram_type *pDiag, long lBeforeIndentation)
  */
 void
 vEndOfParagraphPS(diagram_type *pDiag,
-	draw_fontref tFontRef, USHORT usFontSize, long lAfterIndentation)
+	USHORT usFontSize, long lAfterIndentation)
 {
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
@@ -955,7 +1154,7 @@ vEndOfParagraphPS(diagram_type *pDiag,
 
 	if (pDiag->lXleft > 0) {
 		/* To the start of the line */
-		vMove2NextLine(pDiag, tFontRef, usFontSize);
+		vMove2NextLinePS(pDiag, usFontSize);
 	}
 
 	pDiag->lXleft = 0;
@@ -966,7 +1165,7 @@ vEndOfParagraphPS(diagram_type *pDiag,
  * Create an end of page
  */
 void
-vEndOfPagePS(diagram_type *pDiag)
+vEndOfPagePS(diagram_type *pDiag, BOOL bNewSection)
 {
-	vMove2NextPage(pDiag);
+	vMove2NextPage(pDiag, bNewSection);
 } /* end of vEndOfPagePS */

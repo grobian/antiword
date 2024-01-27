@@ -1,6 +1,6 @@
 /*
  * stylelist.c
- * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1998-2005 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Build, read and destroy a list of Word style information
@@ -79,7 +79,9 @@ vConvertListCharacter(UCHAR ucNFC, USHORT usListChar, char *szListChar)
 		return;
 	}
 
-	if (ucNFC != LIST_SPECIAL && ucNFC != LIST_BULLETS) {
+	if (ucNFC != LIST_SPECIAL &&
+	    ucNFC != LIST_SPECIAL2 &&
+	    ucNFC != LIST_BULLETS) {
 		szListChar[0] = '.';
 		szListChar[1] = '\0';
 		return;
@@ -156,11 +158,16 @@ vConvertListCharacter(UCHAR ucNFC, USHORT usListChar, char *szListChar)
 		    (usListChar < 0x80 && !isprint((int)usListChar))) {
 			/*
 			 * All remaining private area characters and all
-			 * remaining non-printable ASCII characters to bullet
+			 * remaining non-printable ASCII characters to their
+			 * default bullet character
 			 */
 			DBG_HEX(usListChar);
 			DBG_FIXME();
-			usListChar = 0x2022;	/* BULLET */
+			if (ucNFC == LIST_SPECIAL || ucNFC == LIST_SPECIAL2) {
+				usListChar = 0x2190;	/* LEFTWARDS ARROW */
+			} else {
+				usListChar = 0x2022;	/* BULLET */
+			}
 		}
 		break;
 	}
@@ -177,7 +184,7 @@ vConvertListCharacter(UCHAR ucNFC, USHORT usListChar, char *szListChar)
 		case 0x2013: case 0x2500:
 			szListChar[0] = '-';
 			break;
-		case 0x2199: case 0x2329:
+		case 0x2190: case 0x2199: case 0x2329:
 			szListChar[0] = '<';
 			break;
 		case 0x21d2:
@@ -386,6 +393,24 @@ pGetNextStyleInfoListItem(const style_block_type *pCurr)
 	}
 	return &pRecord->pNext->tInfo;
 } /* end of pGetNextStyleInfoListItem */
+
+/*
+ * Get the next text style
+ */
+const style_block_type *
+pGetNextTextStyle(const style_block_type *pCurr)
+{
+	const style_block_type	*pRecord;
+
+	pRecord = pCurr;
+	do {
+		pRecord = pGetNextStyleInfoListItem(pRecord);
+	} while (pRecord != NULL &&
+		 (pRecord->eListID == hdrftr_list ||
+		  pRecord->eListID == macro_list ||
+		  pRecord->eListID == annotation_list));
+	return pRecord;
+} /* end of pGetNextTextStyle */
 
 /*
  * usGetIstd - get the istd that belongs to the given file offset

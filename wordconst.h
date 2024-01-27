@@ -83,6 +83,7 @@
 #define LIST_ORDINAL_TXT		0x07
 #define LIST_OUTLINE_NUM		0x16
 #define LIST_SPECIAL			0x17
+#define LIST_SPECIAL2			0x19
 #define LIST_BULLETS			0xff
 /* Types of paragraph alignment */
 #define ALIGNMENT_LEFT			0x00

@@ -1,6 +1,6 @@
 /*
  * pdf.c
- * Copyright (C) 2003,2004 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 2003-2005 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Functions to deal with the Adobe Portable Document Format (pdf)
@@ -29,14 +29,22 @@ static const char	*szProducer = NULL;
 /* The height and width of a PDF page (in DrawUnits) */
 static long		lPageHeight = LONG_MAX;
 static long		lPageWidth = LONG_MAX;
+/* The height of the footer on the current page (in DrawUnits) */
+static long		lFooterHeight = 0;
+/* Inside a footer (to prevent an infinite loop when the footer is too big) */
+static BOOL		bInFtrSpace = FALSE;
 /* Current font information */
-static draw_fontref	tFontRefCurr = (draw_fontref)-1;
+static drawfile_fontref	tFontRefCurr = (drawfile_fontref)-1;
 static USHORT		usFontSizeCurr = 0;
 static int		iFontColorCurr = -1;
 /* Current vertical position information */
 static long		lYtopCurr = -1;
 /* Image counter */
 static int		iImageCount = 0;
+/* Section index */
+static int		iSectionIndex = 0;
+/* Are we on the first page of the section? */
+static BOOL		bFirstInSection = TRUE;
 /* File positions */
 static long		lFilePosition = 0;
 static long		*alLocation = NULL;
@@ -51,6 +59,8 @@ static size_t		tMaxPageObjects = 0;
 /* Current object number */
 /* 1 = root; 2 = info; 3 = pages; 4 = encoding; 5-16 = fonts; 17 = resources */
 static int		iObjectNumberCurr = 17;
+
+static void		vMoveTo(diagram_type *, long);
 
 static const struct {
 	const char	*szPDFname;
@@ -123,7 +133,7 @@ static const char *iso_8859_2[] = {
  * tGetFontIndex - get the font index
  */
 static size_t
-tGetFontIndex(draw_fontref tFontRef)
+tGetFontIndex(drawfile_fontref tFontRef)
 {
 	const char	*szFontname;
 	size_t		tIndex;
@@ -269,6 +279,163 @@ vCreateInfoDictionary(diagram_type *pDiag, int iWordVersion)
 } /* end of vCreateInfoDictionary */
 
 /*
+ * vAddHdrFtr - add a header or footer
+ */
+static void
+vAddHdrFtr(diagram_type *pDiag, const hdrftr_block_type *pHdrFtrInfo)
+{
+	output_type	*pStart, *pPrev, *pNext;
+
+	fail(pDiag == NULL);
+	fail(pHdrFtrInfo == NULL);
+
+	vStartOfParagraphPDF(pDiag, 0);
+	pStart = pHdrFtrInfo->pText;
+	while (pStart != NULL) {
+		pNext = pStart;
+		while (pNext != NULL &&
+		       (pNext->tNextFree != 1 ||
+		        (pNext->szStorage[0] != PAR_END &&
+		         pNext->szStorage[0] != HARD_RETURN))) {
+			pNext = pNext->pNext;
+		}
+		if (pNext == NULL) {
+			if (bOutputContainsText(pStart)) {
+				vAlign2Window(pDiag, pStart,
+					lChar2MilliPoints(DEFAULT_SCREEN_WIDTH),
+					ALIGNMENT_LEFT);
+			} else {
+				vMove2NextLinePDF(pDiag, pStart->usFontSize);
+			}
+			break;
+		}
+		fail(pNext->tNextFree != 1);
+		fail(pNext->szStorage[0] != PAR_END &&
+			pNext->szStorage[0] != HARD_RETURN);
+
+		if (pStart != pNext) {
+			/* There is something to print */
+			pPrev = pNext->pPrev;
+			fail(pPrev->pNext != pNext);
+			/* Cut the chain */
+			pPrev->pNext = NULL;
+			if (bOutputContainsText(pStart)) {
+				/* Print it */
+				vAlign2Window(pDiag, pStart,
+					lChar2MilliPoints(DEFAULT_SCREEN_WIDTH),
+					ALIGNMENT_LEFT);
+			} else {
+				/* Just an empty line */
+				vMove2NextLinePDF(pDiag, pStart->usFontSize);
+			}
+			/* Repair the chain */
+			pPrev->pNext = pNext;
+		}
+		if (pNext->szStorage[0] == PAR_END) {
+			vEndOfParagraphPDF(pDiag, pNext->usFontSize,
+					(long)pNext->usFontSize * 200);
+		}
+		pStart = pNext->pNext;
+	}
+} /* end of vAddHdrFtr */
+
+/*
+ * vAddHeader - add a page header
+ */
+static void
+vAddHeader(diagram_type *pDiag)
+{
+	const hdrftr_block_type *pHdrInfo;
+	const hdrftr_block_type *pFtrInfo;
+
+	fail(pDiag == NULL);
+
+	NO_DBG_MSG("vAddHeader");
+
+	pHdrInfo = pGetHdrFtrInfo(iSectionIndex, TRUE,
+					odd(iPageCount), bFirstInSection);
+	pFtrInfo = pGetHdrFtrInfo(iSectionIndex, FALSE,
+					odd(iPageCount), bFirstInSection);
+	/* Set the height of the footer of this page */
+	lFooterHeight = pFtrInfo == NULL ? 0 : pFtrInfo->lHeight;
+	fail(lFooterHeight < 0);
+
+	if (pHdrInfo == NULL ||
+	    pHdrInfo->pText == NULL ||
+	    pHdrInfo->lHeight <= 0) {
+		fail(pHdrInfo != NULL && pHdrInfo->lHeight < 0);
+		fail(pHdrInfo != NULL &&
+			pHdrInfo->pText != NULL &&
+			pHdrInfo->lHeight == 0);
+		return;
+	}
+
+	vAddHdrFtr(pDiag, pHdrInfo);
+
+	DBG_DEC_C(pHdrInfo->lHeight !=
+		lPageHeight - PS_TOP_MARGIN - pDiag->lYtop,
+		pHdrInfo->lHeight);
+	DBG_DEC_C(pHdrInfo->lHeight !=
+		lPageHeight - PS_TOP_MARGIN - pDiag->lYtop,
+		lPageHeight - PS_TOP_MARGIN - pDiag->lYtop);
+} /* end of vAddHeader */
+
+/*
+ * vAddFooter - add a page footer
+ */
+static void
+vAddFooter(diagram_type *pDiag)
+{
+	const hdrftr_block_type *pFtrInfo;
+
+	fail(pDiag == NULL);
+
+	NO_DBG_MSG("vAddFooter");
+
+	pFtrInfo = pGetHdrFtrInfo(iSectionIndex, FALSE,
+					odd(iPageCount), bFirstInSection);
+	bFirstInSection = FALSE;
+	if (pFtrInfo == NULL ||
+	    pFtrInfo->pText == NULL ||
+	    pFtrInfo->lHeight <= 0) {
+		fail(pFtrInfo != NULL && pFtrInfo->lHeight < 0);
+		fail(pFtrInfo != NULL &&
+			pFtrInfo->pText != NULL &&
+			pFtrInfo->lHeight == 0);
+		return;
+	}
+
+	bInFtrSpace = TRUE;
+
+	DBG_DEC_C(pFtrInfo->lHeight != lFooterHeight, pFtrInfo->lHeight);
+	DBG_DEC_C(pFtrInfo->lHeight != lFooterHeight, lFooterHeight);
+	DBG_DEC_C(pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN,
+			pDiag->lYtop);
+	DBG_DEC_C(pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN,
+			lFooterHeight + PS_BOTTOM_MARGIN);
+
+	if (pDiag->lYtop > lFooterHeight + PS_BOTTOM_MARGIN) {
+		/* Move down to the start of the footer */
+		pDiag->lYtop = lFooterHeight + PS_BOTTOM_MARGIN;
+		vMoveTo(pDiag, 0);
+	} else if (pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN / 2) {
+		DBG_FIXME();
+		/*
+		 * Move up to the start of the footer, to prevent moving
+		 * of the bottom edge of the paper
+		 */
+		pDiag->lYtop = lFooterHeight + PS_BOTTOM_MARGIN;
+		vMoveTo(pDiag, 0);
+	}
+
+	DBG_FLT_C(pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN,
+	dDrawUnits2Points(lFooterHeight + PS_BOTTOM_MARGIN - pDiag->lYtop));
+
+	vAddHdrFtr(pDiag, pFtrInfo);
+	bInFtrSpace = FALSE;
+} /* end of vAddFooter */
+
+/*
  * vEndPageObject - end the current page object
  */
 static void
@@ -297,7 +464,7 @@ vEndPageObject(FILE *pOutFile)
  * vMove2NextPage - move to the start of the next page
  */
 static void
-vMove2NextPage(diagram_type *pDiag)
+vMove2NextPage(diagram_type *pDiag, BOOL bNewSection)
 {
 	FILE	*pOutFile;
 
@@ -306,8 +473,13 @@ vMove2NextPage(diagram_type *pDiag)
 
 	pOutFile = pDiag->pOutFile;
 
+	vAddFooter(pDiag);
 	/* End the old page object */
 	vEndPageObject(pOutFile);
+	if (bNewSection) {
+		iSectionIndex++;
+		bFirstInSection = TRUE;
+	}
 
 	/* Start the new page object */
 	iObjectNumberCurr++;
@@ -335,10 +507,11 @@ vMove2NextPage(diagram_type *pDiag)
 
 	/* Set variables to their start of page values */
 	pDiag->lYtop = lPageHeight - PS_TOP_MARGIN;
-	tFontRefCurr = (draw_fontref)-1;
+	tFontRefCurr = (drawfile_fontref)-1;
 	usFontSizeCurr = 0;
 	iFontColorCurr = -1;
 	lYtopCurr = -1;
+	vAddHeader(pDiag);
 } /* end of vMove2NextPage */
 
 /*
@@ -353,12 +526,15 @@ vMoveTo(diagram_type *pDiag, long lLastVerticalMovement)
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
 
-	if (pDiag->lYtop < PS_BOTTOM_MARGIN) {
-		vMove2NextPage(pDiag);
+	if (pDiag->lYtop <= lFooterHeight + PS_BOTTOM_MARGIN && !bInFtrSpace) {
+		vMove2NextPage(pDiag, FALSE);
 		/* Repeat the last vertical movement on the new page */
 		pDiag->lYtop -= lLastVerticalMovement;
 	}
-	fail(pDiag->lYtop < PS_BOTTOM_MARGIN);
+
+	fail(pDiag->lYtop < lFooterHeight + PS_BOTTOM_MARGIN && !bInFtrSpace);
+	DBG_DEC_C(pDiag->lYtop < PS_BOTTOM_MARGIN, pDiag->lYtop);
+	fail(pDiag->lYtop < PS_BOTTOM_MARGIN / 3);
 
 	if (pDiag->lYtop != lYtopCurr) {
 		vFPprintf(pDiag->pOutFile, "1 0 0 1 %.2f %.2f Tm\n",
@@ -405,16 +581,20 @@ vProloguePDF(diagram_type *pDiag,
 		lPageWidth = lPoints2DrawUnits(pOptions->iPageWidth);
 	}
 	DBG_DEC(lPageWidth);
+	lFooterHeight = 0;
+	bInFtrSpace = FALSE;
 
-	tFontRefCurr = (draw_fontref)-1;
+	tFontRefCurr = (drawfile_fontref)-1;
 	usFontSizeCurr = 0;
 	iFontColorCurr = -1;
 	lYtopCurr = -1;
+	iPageCount = 0;
 	iImageCount = 0;
+	iSectionIndex = 0;
+	bFirstInSection = TRUE;
 	lFilePosition = 0;
 	iMaxLocationNumber = 0;
 	lStreamStart = -1;
-	iPageCount = 0;
 	iObjectNumberCurr = 17;
 	pDiag->lXleft = 0;
 	pDiag->lYtop = 0;
@@ -449,6 +629,8 @@ vEpiloguePDF(diagram_type *pDiag)
 
 	pOutFile = pDiag->pOutFile;
 
+	vAddFooter(pDiag);
+	/* End the old page object */
 	vEndPageObject(pOutFile);
 
 	vSetLocation(3);
@@ -616,7 +798,7 @@ vImageProloguePDF(diagram_type *pDiag, const imagedata_type *pImg)
 		vFPprintf(pOutFile, "\t\t/Predictor 10\n");
 		vFPprintf(pOutFile, "\t\t/Colors %d\n", pImg->iComponents);
 		vFPprintf(pOutFile, "\t\t/BitsPerComponent %u\n",
-                                                pImg->uiBitsPerComponent);
+						pImg->uiBitsPerComponent);
 		vFPprintf(pOutFile, "\t\t/Columns %d\n", pImg->iWidth);
 		vFPprintf(pOutFile, "\t\t>> ]\n");
 		break;
@@ -786,6 +968,7 @@ vAddFontsPDF(diagram_type *pDiag)
 	vFPprintf(pOutFile, "\t>>\n");
 	vFPprintf(pOutFile, ">>\n");
 	vFPprintf(pOutFile, "endobj\n");
+	vAddHeader(pDiag);
 } /* end of vAddFontsPDF */
 
 /*
@@ -880,7 +1063,7 @@ vMove2NextLinePDF(diagram_type *pDiag, USHORT usFontSize)
 	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
 
 	pDiag->lYtop -= lComputeLeading(usFontSize);
-} /* end of vMove2NextLinePS */
+} /* end of vMove2NextLinePDF */
 
 /*
  * vSubstringPDF - print a sub string
@@ -888,7 +1071,7 @@ vMove2NextLinePDF(diagram_type *pDiag, USHORT usFontSize)
 void
 vSubstringPDF(diagram_type *pDiag,
 	char *szString, size_t tStringLength, long lStringWidth,
-	UCHAR ucFontColor, USHORT usFontstyle, draw_fontref tFontRef,
+	UCHAR ucFontColor, USHORT usFontstyle, drawfile_fontref tFontRef,
 	USHORT usFontSize, USHORT usMaxFontSize)
 {
 	size_t	tFontIndex;
@@ -939,7 +1122,7 @@ vStartOfParagraphPDF(diagram_type *pDiag, long lBeforeIndentation)
  */
 void
 vEndOfParagraphPDF(diagram_type *pDiag,
-	draw_fontref tFontRef, USHORT usFontSize, long lAfterIndentation)
+	USHORT usFontSize, long lAfterIndentation)
 {
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
@@ -948,7 +1131,7 @@ vEndOfParagraphPDF(diagram_type *pDiag,
 
 	if (pDiag->lXleft > 0) {
 		/* To the start of the line */
-		vMove2NextLine(pDiag, tFontRef, usFontSize);
+		vMove2NextLinePDF(pDiag, usFontSize);
 	}
 
 	pDiag->lXleft = 0;
@@ -959,7 +1142,7 @@ vEndOfParagraphPDF(diagram_type *pDiag,
  * Create an end of page
  */
 void
-vEndOfPagePDF(diagram_type *pDiag)
+vEndOfPagePDF(diagram_type *pDiag, BOOL bNewSection)
 {
-	vMove2NextPage(pDiag);
+	vMove2NextPage(pDiag, bNewSection);
 } /* end of vEndOfPagePDF */

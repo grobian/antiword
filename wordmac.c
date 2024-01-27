@@ -1,6 +1,6 @@
 /*
  * wordmac.c
- * Copyright (C) 2002, 2003 A.J. van Os; Released under GPL
+ * Copyright (C) 2002-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Deal with the MAC internals of a MS Word file
@@ -97,10 +97,10 @@ iInitDocumentMAC(FILE *pFile, long lFilesize)
 	}
 	bSuccess = bGetDocumentText(pFile, aucHeader);
 	if (bSuccess) {
-		vSetDefaultTabWidth(pFile, NULL,
+		vGetPropertyInfo(pFile, NULL,
 				NULL, 0, NULL, 0,
 				aucHeader, iWordVersion);
-		vGetPropertyInfo(pFile, NULL,
+		vSetDefaultTabWidth(pFile, NULL,
 				NULL, 0, NULL, 0,
 				aucHeader, iWordVersion);
 	}

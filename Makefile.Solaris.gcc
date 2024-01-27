@@ -1,21 +1,22 @@
 #
 # Makefile for antiword (Solaris version)
 #
-# Original version by: Gary Mills <mills@cc.UManitoba.CA>
+# Original version by: Mark Leisher <mleisher@crl.NMSU.Edu>
+# Based on a Makefile by: Gary Mills <mills@cc.UManitoba.CA>
 #
 
-CC	= cc
-LD	= cc
+CC	= gcc
+LD	= gcc
 INSTALL	= /usr/ucb/install
 
 # must be equal to DEBUG or NDEBUG
 DB	= NDEBUG
 # Optimization: -O<n> or debugging: -g
-OPT	= -xO2
+OPT	= -O2
 
 LDLIBS	=
 
-CFLAGS	= $(OPT) -D$(DB)
+CFLAGS	= $(OPT) -D$(DB) -D__STDC_ISO_10646__
 LDFLAGS	=
 
 OBJS	=\

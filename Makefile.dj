@@ -19,13 +19,13 @@ LDFLAGS	=
 
 OBJS	=\
 	main_u.o asc85enc.o blocklist.o chartrans.o datalist.o depot.o\
-	dib2eps.o fail.o finddata.o findtext.o fmt_text.o fontlist.o fonts.o\
-	fonts_u.o imgexam.o imgtrans.o jpeg2eps.o listlist.o misc.o notes.o\
-	options.o out2window.o output.o pdf.o pictlist.o png2eps.o postscript.o\
-	prop0.o prop2.o prop6.o prop8.o properties.o propmod.o rowlist.o\
-	sectlist.o stylelist.o stylesheet.o summary.o tabstop.o text.o unix.o\
-	utf8.o word2text.o worddos.o wordlib.o wordmac.o wordole.o wordwin.o\
-	xmalloc.o xml.o dos.o
+	dib2eps.o doclist.o fail.o finddata.o findtext.o fmt_text.o fontlist.o\
+	fonts.o fonts_u.o hdrftrli.o imgexam.o imgtrans.o jpeg2eps.o listlist.o\
+	misc.o notes.o options.o out2window.o output.o pdf.o pictlist.o\
+	png2eps.o postscript.o prop0.o prop2.o prop6.o prop8.o properties.o\
+	propmod.o rowlist.o sectlist.o stylelist.o stylesheet.o summary.o\
+	tabstop.o text.o unix.o utf8.o word2text.o worddos.o wordlib.o\
+	wordmac.o wordole.o wordwin.o xmalloc.o xml.o dos.o
 
 PROG	= antiword.exe
 

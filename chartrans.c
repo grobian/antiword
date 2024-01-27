@@ -583,7 +583,14 @@ ulTranslateCharacters(USHORT usChar, ULONG ulFileOffset, int iWordVersion,
 	case UNICODE_TWO_DOT_LEADER:
 		return (ULONG)'.';
 	case UNICODE_ELLIPSIS:
+#if defined(__riscos)
 		return (ULONG)OUR_ELLIPSIS;
+#else
+		if (ulFileOffset == 0) {
+			return (ULONG)OUR_ELLIPSIS;
+		}
+		return UNICODE_ELLIPSIS;
+#endif /* __riscos */
 	case UNICODE_DOUBLE_LEFT_ANGLE_QMARK:
 	case UNICODE_TRIANGULAR_BULLET:
 	case UNICODE_SINGLE_LEFT_ANGLE_QMARK:

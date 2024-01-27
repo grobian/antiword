@@ -1,6 +1,6 @@
 /*
  * properties.c
- * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1998-2005 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Read the properties information from a MS Word file
@@ -22,6 +22,8 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 {
 	options_type	tOptions;
 
+	TRACE_MSG("vGetPropertyInfo");
+
 	fail(pFile == NULL);
 	fail(pPPS == NULL && iWordVersion >= 6);
 	fail(aulBBD == NULL && tBBDLen != 0);
@@ -34,6 +36,7 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 	/* Get the property information per Word version */
 	switch (iWordVersion) {
 	case 0:
+		vGet0DopInfo(pFile, aucHeader);
 		vGet0SepInfo(pFile, aucHeader);
 		vGet0PapInfo(pFile, aucHeader);
 		if (tOptions.eConversionType == conversion_draw ||
@@ -53,8 +56,13 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 	case 1:
 	case 2:
 		vGet2Stylesheet(pFile, iWordVersion, aucHeader);
+		vGet2DopInfo(pFile, aucHeader);
 		vGet2SepInfo(pFile, aucHeader);
 		vGet2PapInfo(pFile, aucHeader);
+		if (tOptions.eConversionType == conversion_ps ||
+		    tOptions.eConversionType == conversion_pdf) {
+			vGet2HdrFtrInfo(pFile, aucHeader);
+		}
 		if (tOptions.eConversionType == conversion_draw ||
 		    tOptions.eConversionType == conversion_ps ||
 		    tOptions.eConversionType == conversion_xml ||
@@ -76,10 +84,17 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 	case 7:
 		vGet6Stylesheet(pFile, pPPS->tWordDocument.ulSB,
 			aulBBD, tBBDLen, aucHeader);
+		vGet6DopInfo(pFile, pPPS->tWordDocument.ulSB,
+			aulBBD, tBBDLen, aucHeader);
 		vGet6SepInfo(pFile, pPPS->tWordDocument.ulSB,
 			aulBBD, tBBDLen, aucHeader);
 		vGet6PapInfo(pFile, pPPS->tWordDocument.ulSB,
 			aulBBD, tBBDLen, aucHeader);
+		if (tOptions.eConversionType == conversion_ps ||
+		    tOptions.eConversionType == conversion_pdf) {
+			vGet6HdrFtrInfo(pFile, pPPS->tWordDocument.ulSB,
+				aulBBD, tBBDLen, aucHeader);
+		}
 		if (tOptions.eConversionType == conversion_draw ||
 		    tOptions.eConversionType == conversion_ps ||
 		    tOptions.eConversionType == conversion_xml ||
@@ -102,10 +117,17 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 		vGet8Stylesheet(pFile, pPPS,
 			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
+		vGet8DopInfo(pFile, &pPPS->tTable,
+			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 		vGet8SepInfo(pFile, pPPS,
 			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 		vGet8PapInfo(pFile, pPPS,
 			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
+		if (tOptions.eConversionType == conversion_ps ||
+		    tOptions.eConversionType == conversion_pdf) {
+			vGet8HdrFtrInfo(pFile, &pPPS->tTable,
+				aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
+		}
 		if (tOptions.eConversionType == conversion_draw ||
 		    tOptions.eConversionType == conversion_ps ||
 		    tOptions.eConversionType == conversion_xml ||
@@ -145,6 +167,8 @@ ePropMod2RowInfo(USHORT usPropMod, int iWordVersion)
 	row_block_type	tRow;
 	const UCHAR	*aucPropMod;
 	int	iLen;
+
+	TRACE_MSG("ePropMod2RowInfo");
 
 	aucPropMod = aucReadPropModListItem(usPropMod);
 	if (aucPropMod == NULL) {

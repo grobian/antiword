@@ -22,6 +22,14 @@ most useful under Windows NT, 2000 and XP.
     the Antiword directory.
 
 
+Problems
+========
+
+If get an dpmi error like: "Load error: no DPMI - Get csdpmi*.zip", you can
+download the missing component from:
+ftp://ftp.fh-koblenz.de/pub/DJGPP/current/v2misc/csdpmi5b.zip
+
+
 Differences between the Unix version of Antiword and the DOS version
 ====================================================================
 

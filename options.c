@@ -10,7 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 #if defined(__riscos)
-#include "wimpt.h"
+#include "DeskLib:Error.h"
+#include "DeskLib:Wimp.h"
 #else
 #include <stdlib.h>
 #if defined(__dos) || defined(N_PLAT_NLM)
@@ -70,6 +71,7 @@ static const options_type	tOptionsDefault = {
 #else
 	conversion_text,
 #endif /* __riscos */
+	TRUE,
 	TRUE,
 	FALSE,
 	encoding_latin_1,
@@ -386,7 +388,7 @@ iReadOptions(int argc, char **argv)
 	strncpy(szLeafname, szGetDefaultMappingFile(), sizeof(szLeafname) - 1);
 	szLeafname[sizeof(szLeafname) - 1] = '\0';
 /* Command line */
-	while ((iChar = getopt(argc, argv, "La:fhi:m:p:stw:x:")) != -1) {
+	while ((iChar = getopt(argc, argv, "La:fhi:m:p:rstw:x:")) != -1) {
 		switch (iChar) {
 		case 'L':
 			tOptionsCurr.bUseLandscape = TRUE;
@@ -440,6 +442,9 @@ iReadOptions(int argc, char **argv)
 				werr(0, "-p without a valid papersize");
 				return -1;
 			}
+			break;
+		case 'r':
+			tOptionsCurr.bRemoveRemovedText = FALSE;
 			break;
 		case 's':
 			tOptionsCurr.bHideHiddenText = FALSE;
@@ -547,7 +552,7 @@ vWriteOptions(void)
 	FILE	*pFile;
 	char	*szOptionsFile;
 
-	DBG_MSG("vWriteOptions");
+	TRACE_MSG("vWriteOptions");
 
 	szOptionsFile = getenv("AntiWord$ChoicesSave");
 	if (szOptionsFile == NULL) {
@@ -583,9 +588,9 @@ vWriteOptions(void)
  * vChoicesOpenAction - action to be taken when the Choices window opens
  */
 void
-vChoicesOpenAction(wimp_w tWindow)
+vChoicesOpenAction(window_handle tWindow)
 {
-	DBG_MSG("vChoicesOpenAction");
+	TRACE_MSG("vChoicesOpenAction");
 
 	tOptionsTemp = tOptionsCurr;
 	if (tOptionsTemp.iParagraphBreak == 0) {
@@ -623,15 +628,16 @@ vChoicesOpenAction(wimp_w tWindow)
 	}
 	vUpdateWriteableNumber(tWindow,
 		CHOICES_SCALE_WRITEABLE, tOptionsTemp.iScaleFactor);
+	TRACE_MSG("end of vChoicesOpenAction");
 } /* end of vChoicesOpenAction */
 
 /*
  * vDefaultButtonAction - action when the default button is clicked
  */
 static void
-vDefaultButtonAction(wimp_w tWindow)
+vDefaultButtonAction(window_handle tWindow)
 {
-	DBG_MSG("vDefaultButtonAction");
+	TRACE_MSG("vDefaultButtonAction");
 
 	tOptionsTemp = tOptionsDefault;
 	vUpdateRadioButton(tWindow, CHOICES_BREAK_BUTTON, TRUE);
@@ -660,7 +666,7 @@ vDefaultButtonAction(wimp_w tWindow)
 static void
 vApplyButtonAction(void)
 {
-	DBG_MSG("vApplyButtonAction");
+	TRACE_MSG("vApplyButtonAction");
 
 	tOptionsCurr = tOptionsTemp;
 } /* end of vApplyButtonAction */
@@ -671,7 +677,7 @@ vApplyButtonAction(void)
 static void
 vSaveButtonAction(void)
 {
-	DBG_MSG("vSaveButtonAction");
+	TRACE_MSG("vSaveButtonAction");
 
 	vApplyButtonAction();
 	vWriteOptions();
@@ -681,7 +687,7 @@ vSaveButtonAction(void)
  * vSetParagraphBreak - set the paragraph break to the given number
  */
 static void
-vSetParagraphBreak(wimp_w tWindow, int iNumber)
+vSetParagraphBreak(window_handle tWindow, int iNumber)
 {
 	tOptionsTemp.iParagraphBreak = iNumber;
 	if (tOptionsTemp.iParagraphBreak == 0) {
@@ -696,7 +702,7 @@ vSetParagraphBreak(wimp_w tWindow, int iNumber)
  * vChangeParagraphBreak - change the paragraph break with the given number
  */
 static void
-vChangeParagraphBreak(wimp_w tWindow, int iNumber)
+vChangeParagraphBreak(window_handle tWindow, int iNumber)
 {
 	int	iTmp;
 
@@ -715,7 +721,7 @@ vChangeParagraphBreak(wimp_w tWindow, int iNumber)
  * vChangeAutofiletype - invert the permission to autofiletype
  */
 static void
-vChangeAutofiletype(wimp_w tWindow)
+vChangeAutofiletype(window_handle tWindow)
 {
 	tOptionsTemp.bAutofiletypeAllowed =
 				!tOptionsTemp.bAutofiletypeAllowed;
@@ -728,7 +734,7 @@ vChangeAutofiletype(wimp_w tWindow)
  * vChangeHiddenText - invert the hide/show hidden text
  */
 static void
-vChangeHiddenText(wimp_w tWindow)
+vChangeHiddenText(window_handle tWindow)
 {
 	tOptionsTemp.bHideHiddenText = !tOptionsTemp.bHideHiddenText;
 	vUpdateRadioButton(tWindow,
@@ -753,7 +759,7 @@ vUseFontsImages(BOOL bUseOutlineFonts, BOOL bShowImages)
  * vSetScaleFactor - set the scale factor to the given number
  */
 static void
-vSetScaleFactor(wimp_w tWindow, int iNumber)
+vSetScaleFactor(window_handle tWindow, int iNumber)
 {
   	tOptionsTemp.iScaleFactor = iNumber;
 	vUpdateWriteableNumber(tWindow,
@@ -765,7 +771,7 @@ vSetScaleFactor(wimp_w tWindow, int iNumber)
  * vChangeScaleFactor - change the scale factor with the given number
  */
 static void
-vChangeScaleFactor(wimp_w tWindow, int iNumber)
+vChangeScaleFactor(window_handle tWindow, int iNumber)
 {
 	int	iTmp;
 
@@ -783,24 +789,30 @@ vChangeScaleFactor(wimp_w tWindow, int iNumber)
 /*
  * bChoicesMouseClick - handle a mouse click in the Choices window
  */
-void
-vChoicesMouseClick(wimp_mousestr *m)
+BOOL
+bChoicesMouseClick(event_pollblock *pEvent, void *pvReference)
 {
-	wimp_i	tAction;
-	BOOL	bCloseWindow, bLeft, bRight;
+	icon_handle	tAction;
+	mouse_block	*pMouse;
+	BOOL		bCloseWindow;
 
-	bLeft = (m->bbits & wimp_BLEFT) == wimp_BLEFT;
-	bRight = (m->bbits & wimp_BRIGHT) == wimp_BRIGHT;
-	if (!bLeft && !bRight) {
-		DBG_HEX(m->bbits);
-		return;
+	TRACE_MSG("bChoicesMouseClick");
+
+	fail(pEvent == NULL);
+	fail(pEvent->type != event_CLICK);
+
+	pMouse = &pEvent->data.mouse;
+	if (!pMouse->button.data.select && !pMouse->button.data.adjust) {
+		/* Not handled here */
+		DBG_HEX(pMouse->button.value);
+		return FALSE;
 	}
 
 	/* Which action should be taken */
-	tAction = m->i;
-	if (bRight) {
-	  	/* The right button reverses the direction */
-		switch (m->i) {
+	tAction = pMouse->icon;
+	if (pMouse->button.data.adjust) {
+	  	/* The adjust button reverses the direction */
+		switch (pMouse->icon) {
 		case CHOICES_BREAK_UP_BUTTON:
 			tAction = CHOICES_BREAK_DOWN_BUTTON;
 			break;
@@ -822,7 +834,7 @@ vChoicesMouseClick(wimp_mousestr *m)
 	bCloseWindow = FALSE;
 	switch (tAction) {
 	case CHOICES_DEFAULT_BUTTON:
-		vDefaultButtonAction(m->w);
+		vDefaultButtonAction(pMouse->window);
 		break;
 	case CHOICES_SAVE_BUTTON:
 		vSaveButtonAction();
@@ -835,22 +847,22 @@ vChoicesMouseClick(wimp_mousestr *m)
 		bCloseWindow = TRUE;
 		break;
 	case CHOICES_BREAK_BUTTON:
-		vSetParagraphBreak(m->w, DEFAULT_SCREEN_WIDTH);
+		vSetParagraphBreak(pMouse->window, DEFAULT_SCREEN_WIDTH);
 		break;
 	case CHOICES_BREAK_UP_BUTTON:
-		vChangeParagraphBreak(m->w, 1);
+		vChangeParagraphBreak(pMouse->window, 1);
 		break;
 	case CHOICES_BREAK_DOWN_BUTTON:
-		vChangeParagraphBreak(m->w, -1);
+		vChangeParagraphBreak(pMouse->window, -1);
 		break;
 	case CHOICES_NO_BREAK_BUTTON:
-		vSetParagraphBreak(m->w, 0);
+		vSetParagraphBreak(pMouse->window, 0);
 		break;
 	case CHOICES_AUTOFILETYPE_BUTTON:
-		vChangeAutofiletype(m->w);
+		vChangeAutofiletype(pMouse->window);
 		break;
 	case CHOICES_HIDDEN_TEXT_BUTTON:
-		vChangeHiddenText(m->w);
+		vChangeHiddenText(pMouse->window);
 		break;
 	case CHOICES_WITH_IMAGES_BUTTON:
 		vUseFontsImages(TRUE, TRUE);
@@ -862,40 +874,51 @@ vChoicesMouseClick(wimp_mousestr *m)
 		vUseFontsImages(FALSE, FALSE);
 		break;
 	case CHOICES_SCALE_UP_BUTTON:
-		vChangeScaleFactor(m->w, 5);
+		vChangeScaleFactor(pMouse->window, 5);
 		break;
 	case CHOICES_SCALE_DOWN_BUTTON:
-		vChangeScaleFactor(m->w, -5);
+		vChangeScaleFactor(pMouse->window, -5);
 		break;
 	default:
-		DBG_DEC(m->i);
+		DBG_DEC(pMouse->icon);
 		break;
 	}
 	if (bCloseWindow) {
-		wimpt_noerr(wimp_close_wind(m->w));
+		Error_CheckFatal(Wimp_CloseWindow(pMouse->window));
 	}
-} /* end of vChoicesMouseClick */
+	return TRUE;
+} /* end of bChoicesMouseClick */
 
-void
-vChoicesKeyPressed(wimp_caretstr *c)
+/*
+ * bChoicesKeyPressed - handle a key in the Choices window
+ */
+BOOL
+bChoicesKeyPressed(event_pollblock *pEvent, void *pvReference)
 {
-	wimp_icon	tIcon;
+	icon_block	tIcon;
+	caret_block	*pCaret;
 	char		*pcChar;
 	int		iNumber;
 
-	DBG_MSG("vChoicesKeyPressed");
+	DBG_MSG("bChoicesKeyPressed");
 
-	fail(c == NULL);
+	fail(pEvent == NULL);
+	fail(pEvent->type != event_KEY);
 
-	wimpt_noerr(wimp_get_icon_info(c->w, c->i, &tIcon));
-	if ((tIcon.flags & (wimp_ITEXT|wimp_INDIRECT)) !=
-	    (wimp_ITEXT|wimp_INDIRECT)) {
-		werr(1, "Icon %d must be indirected text", (int)c->i);
-		return;
+	if (pEvent->data.key.code != '\r') {
+		Error_CheckFatal(Wimp_ProcessKey(pEvent->data.key.code));
+		return TRUE;
+	}
+
+	pCaret = &pEvent->data.key.caret;
+
+	Error_CheckFatal(Wimp_GetIconState(pCaret->window, pCaret->icon, &tIcon));
+	if (!tIcon.flags.data.text || !tIcon.flags.data.indirected) {
+		werr(1, "Icon %d must be indirected text", (int)pCaret->icon);
 	}
 	iNumber = (int)strtol(tIcon.data.indirecttext.buffer, &pcChar, 10);
 
-	switch(c->i) {
+	switch(pCaret->icon) {
 	case CHOICES_BREAK_WRITEABLE:
 		if (*pcChar != '\0' && *pcChar != '\r') {
 			DBG_DEC(*pcChar);
@@ -905,7 +928,7 @@ vChoicesKeyPressed(wimp_caretstr *c)
 		} else if (iNumber > MAX_SCREEN_WIDTH) {
 			iNumber = MAX_SCREEN_WIDTH;
 		}
-		vSetParagraphBreak(c->w, iNumber);
+		vSetParagraphBreak(pCaret->window, iNumber);
 		break;
 	case CHOICES_SCALE_WRITEABLE:
 		if (*pcChar != '\0' && *pcChar != '\r') {
@@ -916,11 +939,12 @@ vChoicesKeyPressed(wimp_caretstr *c)
 		} else if (iNumber > MAX_SCALE_FACTOR) {
 			iNumber = MAX_SCALE_FACTOR;
 		}
-		vSetScaleFactor(c->w, iNumber);
+		vSetScaleFactor(pCaret->window, iNumber);
 		break;
 	default:
-		DBG_DEC(c->i);
+		DBG_DEC(pCaret->icon);
 		break;
 	}
-} /* end of vChoicesKeyPressed */
+	return TRUE;
+} /* end of bChoicesKeyPressed */
 #endif /* __riscos */

@@ -789,10 +789,10 @@ iInitDocumentOLE(FILE *pFile, long lFilesize)
 	if (bSuccess) {
 		vGetDocumentData(pFile, &PPS_info,
 			aulBBD, tBBDLen, aucHeader, iWordVersion);
-		vSetDefaultTabWidth(pFile, &PPS_info,
+		vGetPropertyInfo(pFile, &PPS_info,
 			aulBBD, tBBDLen, aulSBD, tSBDLen,
 			aucHeader, iWordVersion);
-		vGetPropertyInfo(pFile, &PPS_info,
+		vSetDefaultTabWidth(pFile, &PPS_info,
 			aulBBD, tBBDLen, aulSBD, tSBDLen,
 			aucHeader, iWordVersion);
 		vGetNotesInfo(pFile, &PPS_info,

@@ -1,22 +1,26 @@
 #
-# Makefile for !Antiword (RISC OS version)
+# Makefile for !Antiword (RISC OS version, using !gcc)
 #
 
-CC	= cc
-LD	= link
+CC	= gccbin:gcc
+LD	= gccbin:gcc
 TOUCH	= stamp
 
 # must equal to DEBUG or NDEBUG
-DB = DEBUG
+DB	= DEBUG
+# Optimization: -O<n> or debugging: -g
+OPT	= -O2
 
-OPTIONS	= -throwback
-#LDFLAGS = -d
-LDLIBS	= C:o.stubs DeskLib:o.DeskLib230
+OPTIONS = -mlibscl -mthrowback
+LDFLAGS = -mlibscl -mthrowback
+#LDFLAGS = -mlibscl -mthrowback -d
+LDLIBS	= flexlib:o32.flexlib DeskLib:o.DeskLib270
 
-CFLAGS	= -IC:,DeskLib:,flexlib: -D__riscos -D$(DB) -DTRACE
-#CFLAGS	= -IC:,DeskLib:,flexlib: -g -D__riscos -D$(DB)
 
-OBJS1	= o.main_ros\
+CFLAGS	= -Wall -pedantic -Wno-char-subscripts $(OPT) -D__riscos -D$(DB) -DTRACE
+#CFLAGS	= -Wall -pedantic -Wno-char-subscripts -D__riscos -D$(DB) -DTRACE
+
+OBJS1 = o.main_ros\
 	o.blocklist o.chartrans o.datalist o.depot o.dib2sprt o.doclist\
 	o.draw o.drawfile o.fail o.finddata o.findtext o.fontlist o.fonts\
 	o.fonts_r o.hdrftrlist o.icons o.imgexam o.imgtrans o.jpeg2sprt\
@@ -26,14 +30,14 @@ OBJS1	= o.main_ros\
 	o.summary o.tabstop o.word2text o.worddos o.wordlib o.wordmac\
 	o.wordole o.wordwin o.xmalloc
 
-OBJS2	= o.startup\
+OBJS2 = o.startup\
 	o.riscos\
 	o.fail
 
 IMAGE1	= @.!Antiword
 IMAGE2	= @.!RunImage
 
-All:		Antiword Startup
+all:		Startup Antiword
 
 Antiword:	$(IMAGE1)
 	@	time
@@ -49,7 +53,12 @@ $(IMAGE2):	$(OBJS2)
 		$(LD) $(LDFLAGS) $(OBJS2) $(LDLIBS) -o $@
 	@	$(TOUCH) $@
 
-.c.o:
-		$(CC) $(CFLAGS) $(OPTIONS) -c c.$*
+#.c.o:
+#		$(CC) $(CFLAGS) $(OPTIONS) -c $<
+o.%: c.%
+		$(CC) $(CFLAGS) $(OPTIONS) -c $<
+		
+i.%: c.%
+		$(CC) $(CFLAGS) $(OPTIONS) -E $< { > $@ }
 
 o.main_ros:	h.version

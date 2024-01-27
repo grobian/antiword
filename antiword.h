@@ -16,11 +16,12 @@
 #include <stdio.h>
 #include <limits.h>
 #if defined(__riscos)
-#include "wimp.h"
-#include "drawfobj.h"
-#include "font.h"
-#include "werr.h"
-#include "draw.h"
+#include "DeskLib:Font.h"
+#include "DeskLib:Wimp.h"
+#include "Desklib:Window.h"
+#include "drawfile.h"
+#define window_ANY	event_ANY
+#define icon_ANY	event_ANY
 #else
 #include <sys/types.h>
 #endif /* __riscos */
@@ -125,8 +126,10 @@
 #define SCALE_100_PCT			 7
 #define SCALE_150_PCT			 8
 
-/* New draw objects */
-#define draw_OBJJPEG		16
+/* Save menu fields */
+#define SAVEMENU_SCALEVIEW		0
+#define SAVEMENU_SAVEDRAW		1
+#define SAVEMENU_SAVETEXT		2
 #else
 /* Margins for the PostScript version */
 #define PS_LEFT_MARGIN			(72 * 640L)
@@ -216,6 +219,10 @@
 #define GLOBAL_ANTIWORD_DIR	"/sys/lib/antiword"
 #define ANTIWORD_DIR		"lib/antiword"
 #define FONTNAMES_FILE		"fontnames"
+#elif defined(__sun__)
+#define GLOBAL_ANTIWORD_DIR	"/usr/local/share/antiword"
+#define ANTIWORD_DIR		".antiword"
+#define FONTNAMES_FILE		"fontnames"
 #else	/* All others */
 #define GLOBAL_ANTIWORD_DIR	"/usr/share/antiword"
 #define ANTIWORD_DIR		".antiword"
@@ -253,10 +260,15 @@ extern void	vDestroyTextBlockList(void);
 extern BOOL	bAdd2TextBlockList(const text_block_type *);
 extern void	vSplitBlockList(FILE *, ULONG, ULONG, ULONG, ULONG, ULONG,
 			ULONG, ULONG, ULONG, BOOL);
+extern BOOL	bExistsHdrFtr(void);
 extern BOOL	bExistsTextBox(void);
 extern BOOL	bExistsHdrTextBox(void);
 extern USHORT	usNextChar(FILE *, list_id_enum, ULONG *, ULONG *, USHORT *);
+extern USHORT	usToHdrFtrPosition(FILE *, ULONG);
+extern USHORT	usToFootnotePosition(FILE *, ULONG);
+extern ULONG	ulCharPos2FileOffsetX(ULONG, list_id_enum *);
 extern ULONG	ulCharPos2FileOffset(ULONG);
+extern ULONG	ulHdrFtrOffset2CharPos(ULONG);
 extern ULONG	ulGetSeqNumber(ULONG);
 #if defined(__riscos)
 extern ULONG	ulGetDocumentLength(void);
@@ -291,18 +303,22 @@ extern BOOL	bTranslateDIB(diagram_type *,
 /* dos.c */
 extern int	iGetCodepage(void);
 #endif /* __dos */
+/* doclist.c */
+extern void	vDestroyDocumentInfoList(void);
+extern void	vCreateDocumentInfoList(const document_block_type *);
+extern UCHAR	ucGetDopHdrFtrSpecification(void);
 /* draw.c & output.c */
 extern BOOL	bAddDummyImage(diagram_type *, const imagedata_type *);
 extern diagram_type *pCreateDiagram(const char *, const char *);
 extern void	vPrologue2(diagram_type *, int);
-extern void	vMove2NextLine(diagram_type *, draw_fontref, USHORT);
+extern void	vMove2NextLine(diagram_type *, drawfile_fontref, USHORT);
 extern void	vSubstring2Diagram(diagram_type *,
 			char *, size_t, long, UCHAR, USHORT,
-			draw_fontref, USHORT, USHORT);
+			drawfile_fontref, USHORT, USHORT);
 extern void	vStartOfParagraph1(diagram_type *, long);
 extern void	vStartOfParagraph2(diagram_type *);
-extern void	vEndOfParagraph(diagram_type *, draw_fontref, USHORT, long);
-extern void	vEndOfPage(diagram_type *, long);
+extern void	vEndOfParagraph(diagram_type *, drawfile_fontref, USHORT, long);
+extern void	vEndOfPage(diagram_type *, long, BOOL);
 extern void	vSetHeaders(diagram_type *, USHORT);
 extern void	vStartOfList(diagram_type *, UCHAR, BOOL);
 extern void	vEndOfList(diagram_type *);
@@ -311,14 +327,20 @@ extern void	vEndOfTable(diagram_type *);
 extern BOOL	bAddTableRow(diagram_type *, char **, int,
 			const short *, UCHAR);
 #if defined(__riscos)
+extern BOOL	bDestroyDiagram(event_pollblock *, void *);
 extern void	vImage2Diagram(diagram_type *, const imagedata_type *,
 			UCHAR *, size_t);
 extern BOOL	bVerifyDiagram(diagram_type *);
 extern void	vShowDiagram(diagram_type *);
-extern void	vMainEventHandler(wimp_eventstr *, void *);
-extern void	vScaleOpenAction(diagram_type *);
+extern void	vMainButtonClick(mouse_block *);
+extern BOOL	bMainKeyPressed(event_pollblock *, void *);
+extern BOOL	bMainEventHandler(event_pollblock *, void *);
+extern BOOL	bRedrawMainWindow(event_pollblock *, void *);
+extern BOOL	bScaleOpenAction(event_pollblock *, void *);
 extern void	vSetTitle(diagram_type *);
-extern void	vScaleEventHandler(wimp_eventstr *, void *);
+extern void	vScaleButtonClick(mouse_block *, diagram_type *);
+extern BOOL	bScaleKeyPressed(event_pollblock *, void *);
+extern BOOL	bScaleEventHandler(event_pollblock *, void *);
 #else
 extern void	vImagePrologue(diagram_type *, const imagedata_type *);
 extern void	vImageEpilogue(diagram_type *);
@@ -362,25 +384,32 @@ extern const font_table_type	*pGetNextFontTableRecord(
 						const font_table_type *);
 extern size_t	tGetFontTableLength(void);
 extern void	vCorrectFontTable(conversion_type, encoding_type);
-extern long	lComputeSpaceWidth(draw_fontref, USHORT);
+extern long	lComputeSpaceWidth(drawfile_fontref, USHORT);
 /* fonts_r.c & fonts_u.c */
 extern FILE	*pOpenFontTableFile(void);
 extern void	vCloseFont(void);
-extern draw_fontref	tOpenFont(UCHAR, USHORT, USHORT);
-extern draw_fontref	tOpenTableFont(USHORT);
-extern long	lComputeStringWidth(const char *, size_t, draw_fontref, USHORT);
+extern drawfile_fontref	tOpenFont(UCHAR, USHORT, USHORT);
+extern drawfile_fontref	tOpenTableFont(USHORT);
+extern long	lComputeStringWidth(const char *, size_t, drawfile_fontref, USHORT);
 extern size_t	tCountColumns(const char *, size_t);
 extern size_t	tGetCharacterLength(const char *);
 /* fonts_u.c */
 #if !defined(__riscos)
-extern const char	*szGetFontname(draw_fontref);
+extern const char	*szGetFontname(drawfile_fontref);
 #endif /* !__riscos */
+/* hdrftrlist.c */
+extern void	vDestroyHdrFtrInfoList(void);
+extern void	vCreat8HdrFtrInfoList(const ULONG *, size_t);
+extern void	vCreat6HdrFtrInfoList(const ULONG *, size_t);
+extern void	vCreat2HdrFtrInfoList(const ULONG *, size_t);
+extern const hdrftr_block_type *pGetHdrFtrInfo(int, BOOL, BOOL, BOOL);
+extern void	vPrepareHdrFtrText(FILE *);
 #if defined(__riscos)
 /* icons.c */
-extern void	vUpdateIcon(wimp_w, wimp_icon *);
-extern void	vUpdateRadioButton(wimp_w, wimp_i, BOOL);
-extern void	vUpdateWriteable(wimp_w, wimp_i, char *);
-extern void	vUpdateWriteableNumber(wimp_w, wimp_i, int);
+extern void	vUpdateIcon(window_handle, icon_block *);
+extern void	vUpdateRadioButton(window_handle, icon_handle, BOOL);
+extern void	vUpdateWriteable(window_handle, icon_handle, const char *);
+extern void	vUpdateWriteableNumber(window_handle, icon_handle, int);
 #endif /* __riscos */
 /* imgexam.c */
 extern image_info_enum	eExamineImage(FILE *, ULONG, imagedata_type *);
@@ -424,19 +453,22 @@ extern void	vGetBulletValue(conversion_type, encoding_type, char *, size_t);
 extern BOOL	bAllZero(const UCHAR *, size_t);
 extern BOOL	bGetNormalizedCodeset(char *, size_t, BOOL *);
 extern const char	*szGetDefaultMappingFile(void);
+extern time_t	tConvertDTTM(ULONG);
 /* notes.c */
 extern void	vDestroyNotesInfoLists(void);
 extern void	vGetNotesInfo(FILE *, const pps_info_type *,
 			const ULONG *, size_t, const ULONG *, size_t,
 			const UCHAR *, int);
+extern void	vPrepareFootnoteText(FILE *);
+extern const char	*szGetFootnootText(UINT);
 extern notetype_enum eGetNotetype(ULONG);
 /* options.c */
 extern int	iReadOptions(int, char **);
 extern void	vGetOptions(options_type *);
 #if defined(__riscos)
-extern void	vChoicesOpenAction(wimp_w);
-extern void	vChoicesMouseClick(wimp_mousestr *);
-extern void	vChoicesKeyPressed(wimp_caretstr *);
+extern void	vChoicesOpenAction(window_handle);
+extern BOOL	bChoicesMouseClick(event_pollblock *, void *);
+extern BOOL	bChoicesKeyPressed(event_pollblock *, void *);
 #endif /* __riscos */
 /* out2window.c */
 extern void	vSetLeftIndentation(diagram_type *, long);
@@ -445,7 +477,7 @@ extern void	vAlign2Window(diagram_type *, output_type *,
 extern void	vJustify2Window(diagram_type *, output_type *,
 			long, long, UCHAR);
 extern void	vResetStyles(void);
-extern size_t	tStyle2Window(char *, const style_block_type *,
+extern size_t	tStyle2Window(char *, size_t, const style_block_type *,
 			const section_block_type *);
 extern void	vTableRow2Window(diagram_type *, output_type *,
 			const row_block_type *, conversion_type, int);
@@ -461,10 +493,10 @@ extern void	vAddFontsPDF(diagram_type *);
 extern void	vMove2NextLinePDF(diagram_type *, USHORT);
 extern void	vSubstringPDF(diagram_type *,
 				char *, size_t, long, UCHAR, USHORT,
-				draw_fontref, USHORT, USHORT);
+				drawfile_fontref, USHORT, USHORT);
 extern void	vStartOfParagraphPDF(diagram_type *, long);
-extern void	vEndOfParagraphPDF(diagram_type *, draw_fontref, USHORT, long);
-extern void	vEndOfPagePDF(diagram_type *);
+extern void	vEndOfParagraphPDF(diagram_type *, USHORT, long);
+extern void	vEndOfPagePDF(diagram_type *, BOOL);
 /* pictlist.c */
 extern void	vDestroyPictInfoList(void);
 extern void	vAdd2PictInfoList(const picture_block_type *);
@@ -483,16 +515,19 @@ extern void	vAddFontsPS(diagram_type *);
 extern void	vMove2NextLinePS(diagram_type *, USHORT);
 extern void	vSubstringPS(diagram_type *,
 				char *, size_t, long, UCHAR, USHORT,
-				draw_fontref, USHORT, USHORT);
+				drawfile_fontref, USHORT, USHORT);
 extern void	vStartOfParagraphPS(diagram_type *, long);
-extern void	vEndOfParagraphPS(diagram_type *, draw_fontref, USHORT, long);
-extern void	vEndOfPagePS(diagram_type *);
+extern void	vEndOfParagraphPS(diagram_type *, USHORT, long);
+extern void	vEndOfPagePS(diagram_type *, BOOL);
 /* prop0.c */
+extern void	vGet0DopInfo(FILE *, const UCHAR *);
 extern void	vGet0SepInfo(FILE *, const UCHAR *);
 extern void	vGet0PapInfo(FILE *, const UCHAR *);
 extern void	vGet0ChrInfo(FILE *, const UCHAR *);
 /* prop2.c */
+extern void	vGet2DopInfo(FILE *, const UCHAR *);
 extern void	vGet2SepInfo(FILE *, const UCHAR *);
+extern void	vGet2HdrFtrInfo(FILE *, const UCHAR *);
 extern row_info_enum	eGet2RowInfo(int,
 			const UCHAR *, int, row_block_type *);
 extern void	vGet2StyleInfo(int,
@@ -504,7 +539,11 @@ extern void	vGet2FontInfo(int,
 			const UCHAR *, size_t, font_block_type *);
 extern void	vGet2ChrInfo(FILE *, int, const UCHAR *);
 /* prop6.c */
+extern void	vGet6DopInfo(FILE *, ULONG, const ULONG *, size_t,
+			const UCHAR *);
 extern void	vGet6SepInfo(FILE *, ULONG, const ULONG *, size_t,
+			const UCHAR *);
+extern void	vGet6HdrFtrInfo(FILE *, ULONG, const ULONG *, size_t,
 			const UCHAR *);
 extern row_info_enum	eGet6RowInfo(int,
 			const UCHAR *, int, row_block_type *);
@@ -517,7 +556,13 @@ extern void	vGet6FontInfo(int, USHORT,
 extern void	vGet6ChrInfo(FILE *, ULONG, const ULONG *, size_t,
 			const UCHAR *);
 /* prop8.c */
+extern void	vGet8DopInfo(FILE *, const pps_type *,
+			const ULONG *, size_t, const ULONG *, size_t,
+			const UCHAR *);
 extern void	vGet8SepInfo(FILE *, const pps_info_type *,
+			const ULONG *, size_t, const ULONG *, size_t,
+			const UCHAR *);
+extern void	vGet8HdrFtrInfo(FILE *, const pps_type *,
 			const ULONG *, size_t, const ULONG *, size_t,
 			const UCHAR *);
 extern row_info_enum	eGet8RowInfo(int,
@@ -555,16 +600,16 @@ extern void	vSetFiletype(const char *, int);
 extern BOOL	bMakeDirectory(const char *);
 extern int	iReadCurrentAlphabetNumber(void);
 extern int	iGetRiscOsVersion(void);
-extern BOOL	bDrawRenderDiag360(draw_diag *,
-			draw_redrawstr *, double, draw_error *);
+extern BOOL	bDrawRenderDiag360(void *, size_t,
+			window_redrawblock *, double, os_error *);
 #if defined(DEBUG)
 extern BOOL	bGetJpegInfo(UCHAR *, size_t);
 #endif /* DEBUG */
 #endif /* __riscos */
 /* saveas.c */
 #if defined(__riscos)
-extern void	vSaveTextfile(diagram_type *);
-extern void	vSaveDrawfile(diagram_type *);
+extern BOOL	bSaveTextfile(event_pollblock *, void *);
+extern BOOL	bSaveDrawfile(event_pollblock *, void *);
 #endif /* __riscos */
 /* sectlist.c */
 extern void	vDestroySectionInfoList(void);
@@ -573,6 +618,8 @@ extern void	vGetDefaultSection(section_block_type *);
 extern void	vDefault2SectionInfoList(ULONG);
 extern const section_block_type *
 		pGetSectionInfo(const section_block_type *, ULONG);
+extern size_t	tGetNumberOfSections(void);
+extern UCHAR	ucGetSepHdrFtrSpecification(size_t);
 /* stylelist.c */
 extern void	vDestroyStyleInfoList(void);
 extern level_type_enum	eGetNumType(UCHAR);
@@ -580,6 +627,7 @@ extern void	vCorrectStyleValues(style_block_type *);
 extern void	vAdd2StyleInfoList(const style_block_type *);
 extern const style_block_type	*pGetNextStyleInfoListItem(
 					const style_block_type *);
+extern const style_block_type	*pGetNextTextStyle(const style_block_type *);
 extern USHORT	usGetIstd(ULONG);
 extern BOOL	bStyleImpliesList(const style_block_type *, int);
 /* stylesheet.c */
@@ -625,10 +673,10 @@ extern void	vStartOfParagraphTXT(diagram_type *, long);
 extern void	vEndOfParagraphTXT(diagram_type *, long);
 extern void	vEndOfPageTXT(diagram_type *, long);
 /* unix.c */
-#if !defined(__riscos)
 extern void	werr(int, const char *, ...);
-extern void	visdelay_begin(void);
-extern void	visdelay_end(void);
+#if !defined(__riscos)
+extern void	Hourglass_On(void);
+extern void	Hourglass_Off(void);
 #endif /* !__riscos */
 /* utf8.c */
 #if !defined(__riscos)
@@ -637,7 +685,10 @@ extern int	utf8_chrlength(const char *);
 extern BOOL	is_locale_utf8(void);
 #endif /* !__riscos */
 /* word2text.c */
+extern BOOL	bOutputContainsText(const output_type *);
 extern BOOL	bWordDecryptor(FILE *, long, diagram_type *);
+extern output_type	*pHdrFtrDecryptor(FILE *, ULONG, ULONG);
+extern char		*szFootnoteDecryptor(FILE *, ULONG, ULONG);
 /* worddos.c */
 extern int	iInitDocumentDOS(FILE *, long);
 /* wordlib.c */
@@ -664,8 +715,8 @@ extern void 	*xrealloc(void *, size_t);
 extern char	*xstrdup(const char *);
 extern void 	*xfree(void *);
 /* xml.c */
-extern void	vCreateBookIntro(diagram_type *, int, encoding_type);
-extern void	vPrologueXML(diagram_type *);
+extern void	vCreateBookIntro(diagram_type *, int);
+extern void	vPrologueXML(diagram_type *, const options_type *);
 extern void	vEpilogueXML(diagram_type *);
 extern void	vMove2NextLineXML(diagram_type *);
 extern void	vSubstringXML(diagram_type *,

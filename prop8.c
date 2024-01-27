@@ -1,13 +1,14 @@
 /*
  * prop8.c
- * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1998-2005 A.J. van Os; Released under GNU GPL
  *
  * Description:
- * Read the property information from a MS Word 8, 9 or 10 file
+ * Read the property information from a MS Word 8, 9,10 or 11 file
  *
  * Word  8 is better known as Word 97 or as Word 98 for Mac
  * Word  9 is better known as Word 2000 or as Word 2001 for Mac
  * Word 10 is better known as Word 2002 or as Word XP
+ * Word 11 is better known as Word 2003
  */
 
 #include <stdlib.h>
@@ -18,7 +19,7 @@
 
 
 /*
- * iGet8InfoLength - the length of the information for Word 8/9/10 files
+ * iGet8InfoLength - the length of the information for Word 8/9/10/11 files
  */
 static int
 iGet8InfoLength(int iByteNbr, const UCHAR *aucGrpprl)
@@ -54,8 +55,101 @@ iGet8InfoLength(int iByteNbr, const UCHAR *aucGrpprl)
 } /* end of iGet8InfoLength */
 
 /*
+ * aucFillInfoBuffer - fill the information buffer
+ *
+ * Returns the information buffer when successful, otherwise NULL
+ */
+static UCHAR *
+aucFillInfoBuffer(FILE *pFile, const pps_type *pTable,
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	ULONG ulBeginInfo, size_t tInfoLen)
+{
+	const ULONG	*aulBlockDepot;
+	UCHAR	*aucBuffer;
+	size_t	tBlockDepotLen, tBlockSize;
+
+	fail(pFile == NULL || pTable == NULL);
+	fail(aulBBD == NULL || aulSBD == NULL);
+	fail(tInfoLen == 0);
+
+	NO_DBG_DEC(pTable->ulSB);
+	NO_DBG_HEX(pTable->ulSize);
+	if (pTable->ulSize == 0) {
+		DBG_MSG("No information");
+		return NULL;
+	}
+
+	if (pTable->ulSize < MIN_SIZE_FOR_BBD_USE) {
+		/* Use the Small Block Depot */
+		aulBlockDepot = aulSBD;
+		tBlockDepotLen = tSBDLen;
+		tBlockSize = SMALL_BLOCK_SIZE;
+	} else {
+		/* Use the Big Block Depot */
+		aulBlockDepot = aulBBD;
+		tBlockDepotLen = tBBDLen;
+		tBlockSize = BIG_BLOCK_SIZE;
+	}
+	aucBuffer = xmalloc(tInfoLen);
+	if (!bReadBuffer(pFile, pTable->ulSB,
+			aulBlockDepot, tBlockDepotLen, tBlockSize,
+			aucBuffer, ulBeginInfo, tInfoLen)) {
+		aucBuffer = xfree(aucBuffer);
+		return NULL;
+	}
+	return aucBuffer;
+} /* end of aucFillInfoBuffer */
+
+/*
+ * Build the lists with Document Property Information for Word 8/9/10/11 files
+ */
+void
+vGet8DopInfo(FILE *pFile, const pps_type *pTable,
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader)
+{
+	document_block_type	tDocument;
+	UCHAR	*aucBuffer;
+	ULONG	ulBeginDocpInfo, ulTmp;
+	size_t	tDocpInfoLen;
+	USHORT	usTmp;
+
+	fail(pFile == NULL || pTable == NULL || aucHeader == NULL);
+	fail(aulBBD == NULL || aulSBD == NULL);
+
+	ulBeginDocpInfo = ulGetLong(0x192, aucHeader); /* fcDop */
+	NO_DBG_HEX(ulBeginSectInfo);
+	tDocpInfoLen = (size_t)ulGetLong(0x196, aucHeader); /* lcbDop */
+	NO_DBG_DEC(tSectInfoLen);
+	if (tDocpInfoLen < 28) {
+		DBG_MSG("No Document information");
+		return;
+	}
+
+	aucBuffer = aucFillInfoBuffer(pFile, pTable,
+			aulBBD, tBBDLen, aulSBD, tSBDLen,
+			ulBeginDocpInfo, tDocpInfoLen);
+	if (aucBuffer == NULL) {
+		return;
+	}
+
+	usTmp = usGetWord(0x00, aucBuffer);
+	tDocument.ucHdrFtrSpecification = (UCHAR)(usTmp >> 8); /* grpfIhdt */
+	tDocument.usDefaultTabWidth = usGetWord(0x0a, aucBuffer); /* dxaTab */
+	ulTmp = ulGetLong(0x14, aucBuffer); /* dttmCreated */
+	tDocument.tCreateDate = tConvertDTTM(ulTmp);
+	ulTmp = ulGetLong(0x18, aucBuffer); /* dttmRevised */
+	tDocument.tRevisedDate = tConvertDTTM(ulTmp);
+	vCreateDocumentInfoList(&tDocument);
+
+	aucBuffer = xfree(aucBuffer);
+} /* end of vGet8DopInfo */
+
+/*
  * Fill the section information block with information
- * from a Word 8/9/10 file.
+ * from a Word 8/9/10/11 file.
  */
 static void
 vGet8SectionInfo(const UCHAR *aucGrpprl, size_t tBytes,
@@ -76,6 +170,10 @@ vGet8SectionInfo(const UCHAR *aucGrpprl, size_t tBytes,
 			ucTmp = ucGetByte(iFodoOff + 2, aucGrpprl);
 			DBG_DEC(ucTmp);
 			pSection->bNewPage = ucTmp != 0 && ucTmp != 1;
+			break;
+		case 0x3014:	/* grpfIhdt */
+			pSection->ucHdrFtrSpecification =
+					ucGetByte(iFodoOff + 2, aucGrpprl);
 			break;
 		case 0x500b:	/* ccolM1 */
 			usCcol = 1 + usGetWord(iFodoOff + 2, aucGrpprl);
@@ -116,7 +214,7 @@ vGet8SectionInfo(const UCHAR *aucGrpprl, size_t tBytes,
 } /* end of vGet8SectionInfo */
 
 /*
- * Build the lists with Section Property Information for Word 8/9/10 files
+ * Build the lists with Section Property Information for Word 8/9/10/11 files
  */
 void
 vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
@@ -125,18 +223,17 @@ vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
 	const UCHAR *aucHeader)
 {
 	section_block_type	tSection;
-	ULONG		*aulSectPage, *aulTextOffset;
-	const ULONG	*aulBlockDepot;
+	ULONG	*aulSectPage, *aulCharPos;
 	UCHAR	*aucBuffer, *aucFpage;
-	ULONG	ulBeginSectInfo;
-	size_t	tSectInfoLen, tBlockDepotLen;
-	size_t	tBlockSize, tOffset, tLen, tBytes;
-	int	iIndex;
+	ULONG	ulBeginOfText, ulTextOffset, ulBeginSectInfo;
+	size_t	tSectInfoLen, tIndex, tOffset, tLen, tBytes;
 	UCHAR	aucTmp[2];
 
 	fail(pFile == NULL || pPPS == NULL || aucHeader == NULL);
 	fail(aulBBD == NULL || aulSBD == NULL);
 
+	ulBeginOfText = ulGetLong(0x18, aucHeader); /* fcMin */
+	NO_DBG_HEX(ulBeginOfText);
 	ulBeginSectInfo = ulGetLong(0xca, aucHeader); /* fcPlcfsed */
 	NO_DBG_HEX(ulBeginSectInfo);
 	tSectInfoLen = (size_t)ulGetLong(0xce, aucHeader); /* lcbPlcfsed */
@@ -146,29 +243,10 @@ vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
 		return;
 	}
 
-	NO_DBG_DEC(pPPS->tTable.ulSB);
-	NO_DBG_HEX(pPPS->tTable.ulSize);
-	if (pPPS->tTable.ulSize == 0) {
-		DBG_MSG("No section information");
-		return;
-	}
-
-	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
-		/* Use the Small Block Depot */
-		aulBlockDepot = aulSBD;
-		tBlockDepotLen = tSBDLen;
-		tBlockSize = SMALL_BLOCK_SIZE;
-	} else {
-		/* Use the Big Block Depot */
-		aulBlockDepot = aulBBD;
-		tBlockDepotLen = tBBDLen;
-		tBlockSize = BIG_BLOCK_SIZE;
-	}
-	aucBuffer = xmalloc(tSectInfoLen);
-	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
-			aulBlockDepot, tBlockDepotLen, tBlockSize,
-			aucBuffer, ulBeginSectInfo, tSectInfoLen)) {
-		aucBuffer = xfree(aucBuffer);
+	aucBuffer = aucFillInfoBuffer(pFile, &pPPS->tTable,
+			aulBBD, tBBDLen, aulSBD, tSBDLen,
+			ulBeginSectInfo, tSectInfoLen);
+	if (aucBuffer == NULL) {
 		return;
 	}
 	NO_DBG_PRINT_BLOCK(aucBuffer, tSectInfoLen);
@@ -176,32 +254,35 @@ vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
 	/* Read the Section Descriptors */
 	tLen = (tSectInfoLen - 4) / 16;
 	/* Save the section offsets */
-	aulTextOffset = xcalloc(tLen, sizeof(ULONG));
-	for (iIndex = 0, tOffset = 0;
-	     iIndex < (int)tLen;
-	     iIndex++, tOffset += 4) {
-		aulTextOffset[iIndex] = ulGetLong(tOffset, aucBuffer);
+	aulCharPos = xcalloc(tLen, sizeof(ULONG));
+	for (tIndex = 0, tOffset = 0;
+	     tIndex < tLen;
+	     tIndex++, tOffset += 4) {
+		ulTextOffset = ulGetLong(tOffset, aucBuffer);
+		NO_DBG_HEX(ulTextOffset);
+		aulCharPos[tIndex] = ulBeginOfText + ulTextOffset;
+		NO_DBG_HEX(aulCharPos[tIndex]);
 	}
 	/* Save the Sepx offsets */
 	aulSectPage = xcalloc(tLen, sizeof(ULONG));
-	for (iIndex = 0, tOffset = (tLen + 1) * 4;
-	     iIndex < (int)tLen;
-	     iIndex++, tOffset += 12) {
-		 aulSectPage[iIndex] = ulGetLong(tOffset + 2, aucBuffer);
-		 NO_DBG_HEX(aulSectPage[iIndex]); /* fcSepx */
+	for (tIndex = 0, tOffset = (tLen + 1) * 4;
+	     tIndex < tLen;
+	     tIndex++, tOffset += 12) {
+		 aulSectPage[tIndex] = ulGetLong(tOffset + 2, aucBuffer);
+		 NO_DBG_HEX(aulSectPage[tIndex]); /* fcSepx */
 	}
 	aucBuffer = xfree(aucBuffer);
 
 	/* Read the Section Properties */
-	for (iIndex = 0; iIndex < (int)tLen; iIndex++) {
-		if (aulSectPage[iIndex] == FC_INVALID) {
-			vDefault2SectionInfoList(aulTextOffset[iIndex]);
+	for (tIndex = 0; tIndex < tLen; tIndex++) {
+		if (aulSectPage[tIndex] == FC_INVALID) {
+			vDefault2SectionInfoList(aulCharPos[tIndex]);
 			continue;
 		}
 		/* Get the number of bytes to read */
 		if (!bReadBuffer(pFile, pPPS->tWordDocument.ulSB,
 				aulBBD, tBBDLen, BIG_BLOCK_SIZE,
-				aucTmp, aulSectPage[iIndex], 2)) {
+				aucTmp, aulSectPage[tIndex], 2)) {
 			continue;
 		}
 		tBytes = 2 + (size_t)usGetWord(0, aucTmp);
@@ -210,7 +291,7 @@ vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
 		aucFpage = xmalloc(tBytes);
 		if (!bReadBuffer(pFile, pPPS->tWordDocument.ulSB,
 				aulBBD, tBBDLen, BIG_BLOCK_SIZE,
-				aucFpage, aulSectPage[iIndex], tBytes)) {
+				aucFpage, aulSectPage[tIndex], tBytes)) {
 			aucFpage = xfree(aucFpage);
 			continue;
 		}
@@ -218,12 +299,64 @@ vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
 		/* Process the bytes */
 		vGetDefaultSection(&tSection);
 		vGet8SectionInfo(aucFpage + 2, tBytes - 2, &tSection);
-		vAdd2SectionInfoList(&tSection, aulTextOffset[iIndex]);
+		vAdd2SectionInfoList(&tSection, aulCharPos[tIndex]);
 		aucFpage = xfree(aucFpage);
 	}
-	aulTextOffset = xfree(aulTextOffset);
+	aulCharPos = xfree(aulCharPos);
 	aulSectPage = xfree(aulSectPage);
 } /* end of vGet8SepInfo */
+
+/*
+ * Build the list with Header/Footer Information for Word 8/9/10/11 files
+ */
+void
+vGet8HdrFtrInfo(FILE *pFile, const pps_type *pTable,
+	const ULONG *aulBBD, size_t tBBDLen,
+	const ULONG *aulSBD, size_t tSBDLen,
+	const UCHAR *aucHeader)
+{
+	ULONG	*aulCharPos;
+	UCHAR	*aucBuffer;
+	ULONG	ulHdrFtrOffset, ulBeginHdrFtrInfo;
+	size_t	tHdrFtrInfoLen, tIndex, tOffset, tLen;
+
+	fail(pFile == NULL || pTable == NULL || aucHeader == NULL);
+	fail(aulBBD == NULL || aulSBD == NULL);
+
+	ulBeginHdrFtrInfo = ulGetLong(0xf2, aucHeader); /* fcPlcfhdd */
+	NO_DBG_HEX(ulBeginHdrFtrInfo);
+	tHdrFtrInfoLen = (size_t)ulGetLong(0xf6, aucHeader); /* lcbPlcfhdd */
+	NO_DBG_DEC(tHdrFtrInfoLen);
+	if (tHdrFtrInfoLen < 8) {
+		DBG_DEC_C(tHdrFtrInfoLen != 0, tHdrFtrInfoLen);
+		return;
+	}
+
+	aucBuffer = aucFillInfoBuffer(pFile, pTable,
+			aulBBD, tBBDLen, aulSBD, tSBDLen,
+			ulBeginHdrFtrInfo, tHdrFtrInfoLen);
+	if (aucBuffer == NULL) {
+		return;
+	}
+	NO_DBG_PRINT_BLOCK(aucBuffer, tHdrFtrInfoLen);
+
+	tLen = tHdrFtrInfoLen / 4 - 1;
+	DBG_DEC_C(tLen % 12 != 1 && tLen % 12 != 7, tLen);
+	/* Save the header/footer offsets */
+	aulCharPos = xcalloc(tLen, sizeof(ULONG));
+	for (tIndex = 0, tOffset = 0;
+	     tIndex < tLen;
+	     tIndex++, tOffset += 4) {
+		ulHdrFtrOffset = ulGetLong(tOffset, aucBuffer);
+		NO_DBG_HEX(ulHdrFtrOffset);
+		aulCharPos[tIndex] = ulHdrFtrOffset2CharPos(ulHdrFtrOffset);
+		NO_DBG_HEX(aulCharPos[tIndex]);
+	}
+	vCreat8HdrFtrInfoList(aulCharPos, tLen);
+	/* Clean up and leave */
+	aulCharPos = xfree(aulCharPos);
+	aucBuffer = xfree(aucBuffer);
+} /* end of vGet8HdrFtrInfo */
 
 /*
  * Translate the rowinfo to a member of the row_info enumeration
@@ -237,6 +370,7 @@ eGet8RowInfo(int iFodo,
 	int	iPosCurr, iPosPrev;
 	USHORT	usTmp;
 	BOOL	bFound2416_0, bFound2416_1, bFound2417_0, bFound2417_1;
+	BOOL	bFound244b_0, bFound244b_1, bFound244c_0, bFound244c_1;
 	BOOL	bFoundd608;
 
 	fail(iFodo < 0 || aucGrpprl == NULL || pRow == NULL);
@@ -246,11 +380,15 @@ eGet8RowInfo(int iFodo,
 	bFound2416_1 = FALSE;
 	bFound2417_0 = FALSE;
 	bFound2417_1 = FALSE;
+	bFound244b_0 = FALSE;
+	bFound244b_1 = FALSE;
+	bFound244c_0 = FALSE;
+	bFound244c_1 = FALSE;
 	bFoundd608 = FALSE;
 	while (iBytes >= iFodoOff + 2) {
 		iInfoLen = 0;
 		switch (usGetWord(iFodo + iFodoOff, aucGrpprl)) {
-		case 0x2416:	/* fIntable */
+		case 0x2416:	/* fInTable */
 			if (odd(ucGetByte(iFodo + iFodoOff + 2, aucGrpprl))) {
 				bFound2416_1 = TRUE;
 			} else {
@@ -262,6 +400,20 @@ eGet8RowInfo(int iFodo,
 				bFound2417_1 = TRUE;
 			} else {
 				bFound2417_0 = TRUE;
+			}
+			break;
+		case 0x244b:	/* sub-table fInTable */
+			if (odd(ucGetByte(iFodo + iFodoOff + 2, aucGrpprl))) {
+				bFound244b_1 = TRUE;
+			} else {
+				bFound244b_0 = TRUE;
+			}
+			break;
+		case 0x244c:	/* sub-table fTtp */
+			if (odd(ucGetByte(iFodo + iFodoOff + 2, aucGrpprl))) {
+				bFound244c_1 = TRUE;
+			} else {
+				bFound244c_0 = TRUE;
 			}
 			break;
 		case 0x6424:	/* brcTop */
@@ -303,6 +455,11 @@ eGet8RowInfo(int iFodo,
 			} else {
 				pRow->ucBorderInfo |= TABLE_BORDER_RIGHT;
 			}
+			break;
+		case 0xd606:	/* cDefTable10 */
+			DBG_MSG("0xd606: sprmTDefTable10");
+			iSize = (int)usGetWord(iFodo + iFodoOff + 2, aucGrpprl);
+			DBG_DEC(iSize);
 			break;
 		case 0xd608:	/* cDefTable */
 			iSize = (int)usGetWord(iFodo + iFodoOff + 2, aucGrpprl);
@@ -348,16 +505,17 @@ eGet8RowInfo(int iFodo,
 		}
 		iFodoOff += iInfoLen;
 	}
-	if (bFound2416_1 && bFound2417_1 && bFoundd608) {
+
+	if (bFound2417_1 && bFoundd608) {
 		return found_end_of_row;
 	}
-	if (bFound2416_0 && bFound2417_0 && !bFoundd608) {
+	if (bFound2417_0 && !bFoundd608) {
 		return found_not_end_of_row;
 	}
-	if (bFound2416_1) {
+	if (bFound2416_1 || bFound244b_1) {
 		return found_a_cell;
 	}
-	if (bFound2416_0) {
+	if (bFound2416_0 || bFound244b_0) {
 		return found_not_a_cell;
 	}
 	return found_nothing;
@@ -365,7 +523,7 @@ eGet8RowInfo(int iFodo,
 
 /*
  * Fill the style information block with information
- * from a Word 8/9/10 file.
+ * from a Word 8/9/10/11 file.
  */
 void
 vGet8StyleInfo(int iFodo,
@@ -555,7 +713,7 @@ sGetLeftIndent(const UCHAR *aucGrpprl, size_t tBytes)
 } /* end of sGetLeftIndent */
 
 /*
- * Build the list with List Information for Word 8/9/10 files
+ * Build the list with List Information for Word 8/9/10/11 files
  */
 void
 vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
@@ -686,6 +844,8 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 				tList.ucNFC = ucGetByte(4, aucLvlfInfo);
 				ucTmp = ucGetByte(5, aucLvlfInfo);
 				tList.bNoRestart = (ucTmp & BIT(3)) != 0;
+				DBG_MSG_C((ucTmp & BIT(4)) != 0 &&
+					(ucTmp & BIT(6)) != 0, "Found one");
 			}
 			ulStart += sizeof(aucLvlfInfo);
 			tPapxLen = (size_t)ucGetByte(25, aucLvlfInfo);
@@ -750,6 +910,7 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 			tOff *= 2;	/* Offset in chars to offset in bytes */
 			NO_DBG_DEC(tOff);
 			if (tList.ucNFC == LIST_SPECIAL ||
+			    tList.ucNFC == LIST_SPECIAL2 ||
 			    tList.ucNFC == LIST_BULLETS) {
 				tList.usListChar = usGetWord(0, aucXString);
 			} else if (tOff != 0 && tOff < tXstLen) {
@@ -769,7 +930,7 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 } /* end of vGet8LstInfo */
 
 /*
- * Build the lists with Paragraph Information for Word 8/9/10 files
+ * Build the lists with Paragraph Information for Word 8/9/10/11 files
  */
 void
 vGet8PapInfo(FILE *pFile, const pps_info_type *pPPS,
@@ -780,12 +941,10 @@ vGet8PapInfo(FILE *pFile, const pps_info_type *pPPS,
 	row_block_type		tRow;
 	style_block_type	tStyle;
 	ULONG		*aulParfPage;
-	const ULONG	*aulBlockDepot;
 	UCHAR	*aucBuffer;
 	ULONG	ulCharPos, ulCharPosFirst, ulCharPosLast;
 	ULONG	ulBeginParfInfo;
-	size_t	tParfInfoLen, tBlockDepotLen;
-	size_t	tBlockSize, tOffset, tLen;
+	size_t	tParfInfoLen, tOffset, tLen;
 	int	iIndex, iIndex2, iRun, iFodo, iLen;
 	row_info_enum	eRowInfo;
 	USHORT	usIstd;
@@ -803,30 +962,10 @@ vGet8PapInfo(FILE *pFile, const pps_info_type *pPPS,
 		return;
 	}
 
-	NO_DBG_DEC(pPPS->tTable.ulSB);
-	NO_DBG_HEX(pPPS->tTable.ulSize);
-	if (pPPS->tTable.ulSize == 0) {
-		DBG_MSG("No paragraph information");
-		return;
-	}
-
-	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
-		/* Use the Small Block Depot */
-		aulBlockDepot = aulSBD;
-		tBlockDepotLen = tSBDLen;
-		tBlockSize = SMALL_BLOCK_SIZE;
-	} else {
-		/* Use the Big Block Depot */
-		aulBlockDepot = aulBBD;
-		tBlockDepotLen = tBBDLen;
-		tBlockSize = BIG_BLOCK_SIZE;
-	}
-
-	aucBuffer = xmalloc(tParfInfoLen);
-	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
-			aulBlockDepot, tBlockDepotLen, tBlockSize,
-			aucBuffer, ulBeginParfInfo, tParfInfoLen)) {
-		aucBuffer = xfree(aucBuffer);
+	aucBuffer = aucFillInfoBuffer(pFile, &pPPS->tTable,
+			aulBBD, tBBDLen, aulSBD, tSBDLen,
+			ulBeginParfInfo, tParfInfoLen);
+	if (aucBuffer == NULL) {
 		return;
 	}
 	NO_DBG_PRINT_BLOCK(aucBuffer, tParfInfoLen);
@@ -876,7 +1015,8 @@ vGet8PapInfo(FILE *pFile, const pps_info_type *pPPS,
 			vGet8StyleInfo(iFodo, aucFpage + 3, iLen - 3, &tStyle);
 			ulCharPos = ulGetLong(iIndex2 * 4, aucFpage);
 			NO_DBG_HEX(ulCharPos);
-			tStyle.ulFileOffset = ulCharPos2FileOffset(ulCharPos);
+			tStyle.ulFileOffset = ulCharPos2FileOffsetX(
+						ulCharPos, &tStyle.eListID);
 			vAdd2StyleInfoList(&tStyle);
 
 			eRowInfo = eGet8RowInfo(iFodo,
@@ -922,7 +1062,7 @@ vGet8PapInfo(FILE *pFile, const pps_info_type *pPPS,
 
 /*
  * Fill the font information block with information
- * from a Word 8/9/10 file.
+ * from a Word 8/9/10/11 file.
  */
 void
 vGet8FontInfo(int iFodo, USHORT usIstd,
@@ -1096,6 +1236,11 @@ vGet8FontInfo(int iFodo, USHORT usIstd,
 				ucGetByte(iFodo + iFodoOff + 2, aucGrpprl);
 			NO_DBG_DEC(pFont->ucFontColor);
 			break;
+		case 0x2a44:	/* cHpsInc */
+			DBG_MSG("0x2a44: sprmCHpsInc");
+			ucTmp = ucGetByte(iFodo + iFodoOff + 2, aucGrpprl);
+			DBG_DEC(ucTmp);
+			break;
 		case 0x2a48:	/* cIss */
 			ucTmp = ucGetByte(iFodo + iFodoOff + 2, aucGrpprl);
 			ucTmp &= 0x07;
@@ -1116,6 +1261,11 @@ vGet8FontInfo(int iFodo, USHORT usIstd,
 				usGetWord(iFodo + iFodoOff + 2, aucGrpprl);
 			NO_DBG_DEC(pFont->usFontSize);
 			break;
+		case 0x4a4d:	/* cHpsMul */
+			DBG_MSG("0x4a4d: sprmCHpsMul");
+			usTmp = usGetWord(iFodo + iFodoOff + 2, aucGrpprl);
+			DBG_DEC(usTmp);
+			break;
 		case 0x4a4f:	/* cFtc0 */
 			usFtc0 = usGetWord(iFodo + iFodoOff + 2, aucGrpprl);
 			break;
@@ -1125,7 +1275,10 @@ vGet8FontInfo(int iFodo, USHORT usIstd,
 		case 0x4a51:	/* cFtc2 */
 			usFtc2 = usGetWord(iFodo + iFodoOff + 2, aucGrpprl);
 			break;
-		case 0xca4a:	/* cHps */
+		case 0xca47:	/* cMajority */
+			DBG_MSG("0xca47: sprmCMajority");
+			break;
+		case 0xca4a:	/* cHpsInc1 */
 			usTmp = usGetWord(iFodo + iFodoOff + 2, aucGrpprl);
 			lTmp = (long)pFont->usFontSize + (long)usTmp;
 			if (lTmp < 8) {
@@ -1136,11 +1289,16 @@ vGet8FontInfo(int iFodo, USHORT usIstd,
 				pFont->usFontSize = (USHORT)lTmp;
 			}
 			break;
+		case 0xca4c:	/* cMajority50 */
+			DBG_MSG("0xca4c: sprmCMajority50");
+			break;
 		case 0xea3f:	/* cHps, cHpsPos */
 			ucTmp = ucGetByte(iFodo + iFodoOff + 2, aucGrpprl);
+			DBG_DEC(ucTmp);
 			if (ucTmp != 0) {
 				pFont->usFontSize = (USHORT)ucTmp;
 			}
+			ucTmp = ucGetByte(iFodo + iFodoOff + 3, aucGrpprl);
 			DBG_DEC(ucTmp);
 			break;
 		default:
@@ -1184,13 +1342,14 @@ vGet8FontInfo(int iFodo, USHORT usIstd,
 
 /*
  * Fill the picture information block with information
- * from a Word 8/9/10 file.
+ * from a Word 8/9/10/11 file.
  * Returns TRUE when successful, otherwise FALSE
  */
 static BOOL
 bGet8PicInfo(int iFodo,
 	const UCHAR *aucGrpprl, int iBytes, picture_block_type *pPicture)
 {
+	ULONG	ulTmp;
 	int	iFodoOff, iInfoLen;
 	BOOL	bFound;
 	UCHAR	ucTmp;
@@ -1201,6 +1360,7 @@ bGet8PicInfo(int iFodo,
 	bFound = FALSE;
 	while (iBytes >= iFodoOff + 2) {
 		switch (usGetWord(iFodo + iFodoOff, aucGrpprl)) {
+#if 0
 		case 0x0806:	/* fData */
 			ucTmp = ucGetByte(iFodo + iFodoOff + 2, aucGrpprl);
 			if (ucTmp == 0x01) {
@@ -1209,6 +1369,7 @@ bGet8PicInfo(int iFodo,
 			}
 			DBG_DEC_C(ucTmp != 0, ucTmp);
 			break;
+#endif
 		case 0x080a:	/* fOle2 */
 			ucTmp = ucGetByte(iFodo + iFodoOff + 2, aucGrpprl);
 			if (ucTmp == 0x01) {
@@ -1216,6 +1377,10 @@ bGet8PicInfo(int iFodo,
 				return FALSE;
 			}
 			DBG_DEC_C(ucTmp != 0, ucTmp);
+			break;
+		case 0x680e:	/* fcObj */
+			ulTmp = ulGetLong(iFodo + iFodoOff + 2, aucGrpprl);
+			DBG_HEX(ulTmp);
 			break;
 		case 0x6a03:	/* fcPic */
 			pPicture->ulPictureOffset = ulGetLong(
@@ -1233,7 +1398,7 @@ bGet8PicInfo(int iFodo,
 } /* end of bGet8PicInfo */
 
 /*
- * Build the lists with Character Information for Word 8/9/10 files
+ * Build the lists with Character Information for Word 8/9/10/11 files
  */
 void
 vGet8ChrInfo(FILE *pFile, const pps_info_type *pPPS,
@@ -1244,11 +1409,9 @@ vGet8ChrInfo(FILE *pFile, const pps_info_type *pPPS,
 	font_block_type		tFont;
 	picture_block_type	tPicture;
 	ULONG		*aulCharPage;
-	const ULONG	*aulBlockDepot;
 	UCHAR	*aucBuffer;
 	ULONG	ulFileOffset, ulCharPos, ulBeginCharInfo;
-	size_t	tCharInfoLen, tBlockDepotLen;
-	size_t	tOffset, tBlockSize, tLen;
+	size_t	tCharInfoLen, tOffset, tLen;
 	int	iIndex, iIndex2, iRun, iFodo, iLen;
 	USHORT	usIstd;
 	UCHAR	aucFpage[BIG_BLOCK_SIZE];
@@ -1265,29 +1428,10 @@ vGet8ChrInfo(FILE *pFile, const pps_info_type *pPPS,
 		return;
 	}
 
-	NO_DBG_DEC(pPPS->tTable.ulSB);
-	NO_DBG_HEX(pPPS->tTable.ulSize);
-	if (pPPS->tTable.ulSize == 0) {
-		DBG_MSG("No character information");
-		return;
-	}
-
-	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
-		/* Use the Small Block Depot */
-		aulBlockDepot = aulSBD;
-		tBlockDepotLen = tSBDLen;
-		tBlockSize = SMALL_BLOCK_SIZE;
-	} else {
-		/* Use the Big Block Depot */
-		aulBlockDepot = aulBBD;
-		tBlockDepotLen = tBBDLen;
-		tBlockSize = BIG_BLOCK_SIZE;
-	}
-	aucBuffer = xmalloc(tCharInfoLen);
-	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
-			aulBlockDepot, tBlockDepotLen, tBlockSize,
-			aucBuffer, ulBeginCharInfo, tCharInfoLen)) {
-		aucBuffer = xfree(aucBuffer);
+	aucBuffer = aucFillInfoBuffer(pFile, &pPPS->tTable,
+			aulBBD, tBBDLen, aulSBD, tSBDLen,
+			ulBeginCharInfo, tCharInfoLen);
+	if (aucBuffer == NULL) {
 		return;
 	}
 	NO_DBG_PRINT_BLOCK(aucBuffer, tCharInfoLen);

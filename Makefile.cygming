@@ -12,27 +12,28 @@ INSTALL_DATA	= $(INSTALL)
 # must be equal to DEBUG or NDEBUG
 DB	= NDEBUG
 # Optimization: -O<n> or debugging: -g
-#OPT	= -O2
-# NOTE: as of 2003/12/15, optimization seems to be broken when
-# using "-mno-cygwin"
-# I'll have a look at this;  in the meantime: don't try to optimize here...  :(
-OPT	=
+OPT	= -O2
 
 
+#LDLIBS	= -lX11
 LDLIBS	=
 
+# NOTE: As of 2004/11/06, cygwin locale is broken, cf. http://www.cygwin.com/ml/cygwin/2004-09/msg01705.html
+# The following fix works for Makefile.cygwin, but not here as setlocale() hangs on my system  :(
+#CFLAGS	= -Wall -pedantic $(OPT) -mno-cygwin -D__CYGMING__ -D$(DB) -DX_LOCALE -I/usr/X11R6/include
 CFLAGS	= -Wall -pedantic $(OPT) -mno-cygwin -D__CYGMING__ -D$(DB)
+#LDFLAGS	= -mno-cygwin -L/usr/X11R6/lib
 LDFLAGS	= -mno-cygwin
 
 OBJS	=\
 	main_u.o asc85enc.o blocklist.o chartrans.o datalist.o depot.o\
-	dib2eps.o fail.o finddata.o findtext.o fmt_text.o fontlist.o fonts.o\
-	fonts_u.o imgexam.o imgtrans.o jpeg2eps.o listlist.o misc.o notes.o\
-	options.o out2window.o output.o pdf.o pictlist.o png2eps.o postscript.o\
-	prop0.o prop2.o prop6.o prop8.o properties.o propmod.o rowlist.o\
-	sectlist.o stylelist.o stylesheet.o summary.o tabstop.o text.o unix.o\
-	utf8.o word2text.o worddos.o wordlib.o wordmac.o wordole.o wordwin.o\
-	xmalloc.o xml.o
+	dib2eps.o doclist.o fail.o finddata.o findtext.o fmt_text.o fontlist.o\
+	fonts.o fonts_u.o hdrftrlist.o imgexam.o imgtrans.o jpeg2eps.o\
+	listlist.o misc.o notes.o options.o out2window.o output.o pdf.o\
+	pictlist.o png2eps.o postscript.o prop0.o prop2.o prop6.o prop8.o\
+	properties.o propmod.o rowlist.o sectlist.o stylelist.o stylesheet.o\
+	summary.o tabstop.o text.o unix.o utf8.o word2text.o worddos.o\
+	wordlib.o wordmac.o wordole.o wordwin.o xmalloc.o xml.o
 
 PROGS =\
 	antiword.exe
@@ -81,9 +82,9 @@ antiword.exe:	$(OBJS)
 	$(LD) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $@
 	@chmod 750 $@
 
-kantiword:	Unix-only/KDE2-only/kantiword.sh
+kantiword:	Unix-only/KDE3-only/kantiword.sh
 	@rm -f $@
-	echo "#!/bin/sh" > $@
+	echo "#!/bin/bash" > $@
 	cat $? >> $@
 	@chmod 750 $@
 

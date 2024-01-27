@@ -115,7 +115,7 @@ vCloseFont(void)
  *
  * Returns the font reference number
  */
-draw_fontref
+drawfile_fontref
 tOpenFont(UCHAR ucWordFontNumber, USHORT usFontStyle, USHORT usWordFontSize)
 {
 	options_type	tOptions;
@@ -140,24 +140,24 @@ tOpenFont(UCHAR ucWordFontNumber, USHORT usFontStyle, USHORT usWordFontSize)
 
 	if (bUsePlainText) {
 		/* Plain text, no fonts */
-		return (draw_fontref)0;
+		return (drawfile_fontref)0;
 	}
 
 	iFontnumber = iGetFontByNumber(ucWordFontNumber, usFontStyle);
 	szOurFontname = szGetOurFontname(iFontnumber);
 	if (szOurFontname == NULL || szOurFontname[0] == '\0') {
 		DBG_DEC(iFontnumber);
-		return (draw_fontref)0;
+		return (drawfile_fontref)0;
 	}
 	NO_DBG_MSG(szOurFontname);
 
 	for (tIndex = 0; tIndex < elementsof(szFontnames); tIndex++) {
 		if (STREQ(szFontnames[tIndex], szOurFontname)) {
 			NO_DBG_DEC(tIndex);
-			return (draw_fontref)tIndex;
+			return (drawfile_fontref)tIndex;
 		}
 	}
-	return (draw_fontref)0;
+	return (drawfile_fontref)0;
 } /* end of tOpenFont */
 
 /*
@@ -165,7 +165,7 @@ tOpenFont(UCHAR ucWordFontNumber, USHORT usFontStyle, USHORT usWordFontSize)
  *
  * Returns the font reference number
  */
-draw_fontref
+drawfile_fontref
 tOpenTableFont(USHORT usWordFontSize)
 {
 	options_type	tOptions;
@@ -181,13 +181,13 @@ tOpenTableFont(USHORT usWordFontSize)
 
 	if (bUsePlainText) {
 		/* Plain text, no fonts */
-		return (draw_fontref)0;
+		return (drawfile_fontref)0;
 	}
 
 	iWordFontnumber = iFontname2Fontnumber(TABLE_FONT, FONT_REGULAR);
 	if (iWordFontnumber < 0 || iWordFontnumber > (int)UCHAR_MAX) {
 		DBG_DEC(iWordFontnumber);
-		return (draw_fontref)0;
+		return (drawfile_fontref)0;
 	}
 
 	return tOpenFont((UCHAR)iWordFontnumber, FONT_REGULAR, usWordFontSize);
@@ -197,7 +197,7 @@ tOpenTableFont(USHORT usWordFontSize)
  * szGetFontname - get the fontname
  */
 const char *
-szGetFontname(draw_fontref tFontRef)
+szGetFontname(drawfile_fontref tFontRef)
 {
 	fail((size_t)(UCHAR)tFontRef >= elementsof(szFontnames));
 	return szFontnames[(int)(UCHAR)tFontRef];
@@ -213,7 +213,7 @@ szGetFontname(draw_fontref tFontRef)
  */
 long
 lComputeStringWidth(const char *szString, size_t tStringLength,
-		draw_fontref tFontRef, USHORT usFontSize)
+	drawfile_fontref tFontRef, USHORT usFontSize)
 {
 	USHORT	*ausCharWidths;
 	UCHAR	*pucChar;

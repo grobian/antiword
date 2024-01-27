@@ -1,6 +1,6 @@
 /*
  * out2window.c
- * Copyright (C) 1998-2004 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2005 A.J. van Os; Released under GPL
  *
  * Description:
  * Output to a text window
@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "antiword.h"
-
 
 /* Used for numbering the chapters */
 static unsigned int	auiHdrCounter[9];
@@ -25,6 +24,8 @@ vString2Diagram(diagram_type *pDiag, output_type *pAnchor)
 	output_type	*pOutput;
 	long		lWidth;
 	USHORT		usMaxFontSize;
+
+	TRACE_MSG("vString2Diagram");
 
 	fail(pDiag == NULL);
 	fail(pAnchor == NULL);
@@ -51,6 +52,7 @@ vString2Diagram(diagram_type *pDiag, output_type *pAnchor)
 
 	/* Goto the start of the line */
 	pDiag->lXleft = 0;
+	TRACE_MSG("leaving vString2Diagram");
 } /* end of vString2Diagram */
 
 /*
@@ -60,6 +62,8 @@ void
 vSetLeftIndentation(diagram_type *pDiag, long lLeftIndentation)
 {
 	long	lX;
+
+	TRACE_MSG("vSetLeftIndentation");
 
 	fail(pDiag == NULL);
 	fail(lLeftIndentation < 0);
@@ -80,6 +84,8 @@ lComputeNetWidth(output_type *pAnchor)
 {
 	output_type	*pTmp;
 	long		lNetWidth;
+
+	TRACE_MSG("lComputeNetWidth");
 
 	fail(pAnchor == NULL);
 
@@ -124,6 +130,8 @@ iComputeHoles(output_type *pAnchor)
 	int	iCounter;
 	BOOL	bWasSpace, bIsSpace;
 
+	TRACE_MSG("iComputeHoles");
+
 	fail(pAnchor == NULL);
 
 	iCounter = 0;
@@ -151,10 +159,10 @@ vAlign2Window(diagram_type *pDiag, output_type *pAnchor,
 {
 	long	lNetWidth, lLeftIndentation;
 
+	TRACE_MSG("vAlign2Window");
+
 	fail(pDiag == NULL || pAnchor == NULL);
 	fail(lScreenWidth < lChar2MilliPoints(MIN_SCREEN_WIDTH));
-
-	NO_DBG_MSG("vAlign2Window");
 
 	lNetWidth = lComputeNetWidth(pAnchor);
 
@@ -165,6 +173,7 @@ vAlign2Window(diagram_type *pDiag, output_type *pAnchor,
 		 * Don't bother to align an empty line
 		 */
 		vString2Diagram(pDiag, pAnchor);
+		TRACE_MSG("leaving vAlign2Window #1");
 		return;
 	}
 
@@ -189,6 +198,7 @@ vAlign2Window(diagram_type *pDiag, output_type *pAnchor,
 		break;
 	}
 	vString2Diagram(pDiag, pAnchor);
+	TRACE_MSG("leaving vAlign2Window #2");
 } /* end of vAlign2Window */
 
 /*
@@ -203,11 +213,11 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 	long	lNetWidth, lSpaceWidth, lToAdd;
 	int	iFillerLen, iHoles;
 
+	TRACE_MSG("vJustify2Window");
+
 	fail(pDiag == NULL || pAnchor == NULL);
 	fail(lScreenWidth < MIN_SCREEN_WIDTH);
 	fail(lRightIndentation > 0);
-
-	NO_DBG_MSG("vJustify2Window");
 
 	if (ucAlignment != ALIGNMENT_JUSTIFY) {
 		vAlign2Window(pDiag, pAnchor, lScreenWidth, ucAlignment);
@@ -223,6 +233,7 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 		 * Don't bother to justify an empty line
 		 */
 		vString2Diagram(pDiag, pAnchor);
+		TRACE_MSG("leaving vJustify2Window #1");
 		return;
 	}
 
@@ -249,6 +260,7 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 	DBG_DEC_C(lToAdd < 0, lToAdd);
 	if (lToAdd <= 0) {
 		vString2Diagram(pDiag, pAnchor);
+		TRACE_MSG("leaving vJustify2Window #2");
 		return;
 	}
 
@@ -285,6 +297,7 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 	}
 	DBG_DEC_C(lToAdd != 0, lToAdd);
 	vString2Diagram(pDiag, pAnchor);
+	TRACE_MSG("leaving vJustify2Window #3");
 } /* end of vJustify2Window */
 
 /*
@@ -293,6 +306,8 @@ vJustify2Window(diagram_type *pDiag, output_type *pAnchor,
 void
 vResetStyles(void)
 {
+	TRACE_MSG("vResetStyles");
+
 	(void)memset(auiHdrCounter, 0, sizeof(auiHdrCounter));
 } /* end of vResetStyles */
 
@@ -302,7 +317,7 @@ vResetStyles(void)
  * Returns the length of the resulting string
  */
 size_t
-tStyle2Window(char *szLine, const style_block_type *pStyle,
+tStyle2Window(char *szLine, size_t tLineSize, const style_block_type *pStyle,
 	const section_block_type *pSection)
 {
 	char	*pcTxt;
@@ -310,6 +325,8 @@ tStyle2Window(char *szLine, const style_block_type *pStyle,
 	BOOL	bNeedPrevLvl;
 	level_type_enum	eNumType;
 	UCHAR	ucNFC;
+
+	TRACE_MSG("tStyle2Window");
 
 	fail(szLine == NULL || pStyle == NULL || pSection == NULL);
 
@@ -342,6 +359,14 @@ tStyle2Window(char *szLine, const style_block_type *pStyle,
 	for (tIndex = 0; tIndex <= tStyleIndex; tIndex++) {
 		if (tIndex == tStyleIndex ||
 		    (bNeedPrevLvl && tIndex < tStyleIndex)) {
+			if (pcTxt - szLine >= tLineSize - 25) {
+				/* Prevent a possible buffer overflow */
+				DBG_DEC(pcTxt - szLine);
+				DBG_DEC(tLineSize - 25);
+				DBG_FIXME();
+				szLine[0] = '\0';
+				return 0;
+			}
 			ucNFC = pSection->aucNFC[tIndex];
 			switch(ucNFC) {
 			case LIST_ARABIC_NUM:
@@ -403,6 +428,8 @@ vRemoveRowEnd(char *szRowTxt)
 {
 	int	iLastIndex;
 
+	TRACE_MSG("vRemoveRowEnd");
+
 	fail(szRowTxt == NULL || szRowTxt[0] == '\0');
 
 	iLastIndex = (int)strlen(szRowTxt) - 1;
@@ -440,6 +467,8 @@ tComputeStringLengthMax(const char *szString, size_t tColumnWidthMax)
 {
 	const char	*pcTmp;
 	size_t	tLengthMax, tLenPrev, tLen, tWidth;
+
+	TRACE_MSG("tComputeStringLengthMax");
 
 	fail(szString == NULL);
 	fail(tColumnWidthMax == 0);
@@ -483,6 +512,8 @@ tGetBreakingPoint(const char *szString,
 {
 	int	iIndex;
 
+	TRACE_MSG("tGetBreakingPoint");
+
 	fail(szString == NULL);
 	fail(tLen > strlen(szString));
 	fail(tWidth > tColumnWidthMax);
@@ -512,6 +543,8 @@ static size_t
 tComputeColumnWidthMax(short sWidth, long lCharWidth, double dFactor)
 {
 	size_t	tColumnWidthMax;
+
+	TRACE_MSG("tComputeColumnWidthMax");
 
 	fail(sWidth < 0);
 	fail(lCharWidth <= 0);
@@ -549,6 +582,8 @@ vTableRow2Window(diagram_type *pDiag, output_type *pOutput,
 	size_t	tSize, tColumnWidthMax, tWidth, tLen;
 	int	iIndex, iNbrOfColumns, iTmp;
 	BOOL	bNotReady;
+
+	TRACE_MSG("vTableRow2Window");
 
 	fail(pDiag == NULL || pOutput == NULL || pRowInfo == NULL);
 	fail(pOutput->szStorage == NULL);
@@ -724,8 +759,10 @@ vTableRow2Window(diagram_type *pDiag, output_type *pOutput,
 					tRow.tFontRef,
 					tRow.usFontSize);
 		vString2Diagram(pDiag, &tRow);
+		TRACE_MSG("after vString2Diagram in vTableRow2Window");
 	} while (bNotReady);
 	/* Clean up before you leave */
 	szLine = xfree(szLine);
+	TRACE_MSG("leaving vTableRow2Window");
 #endif /* __FULL_TEXT_SEARCH */
 } /* end of vTableRow2Window */

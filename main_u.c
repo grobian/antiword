@@ -29,9 +29,15 @@
 #include <fcntl.h>
 #include <io.h>
 #endif /* __dos */
-#if defined(__STDC_ISO_10646__)
+#if defined(__CYGWIN__) || defined(__CYGMING__)
+#  ifdef X_LOCALE
+#    include <X11/Xlocale.h>
+#  else
+#    include <locale.h>
+#  endif
+#else
 #include <locale.h>
-#endif /* __STDC_ISO_10646__ */
+#endif /* __CYGWIN__ || __CYGMING__ */
 #if defined(N_PLAT_NLM)
 #if !defined(_VA_LIST)
 #include "NW-only/nw_os.h"
@@ -73,6 +79,7 @@ vUsage(void)
 	fprintf(stderr, "\t\t-w <width> in characters of text output\n");
 	fprintf(stderr, "\t\t-i <level> image level (PostScript only)\n");
 	fprintf(stderr, "\t\t-L use landscape mode (PostScript only)\n");
+	fprintf(stderr, "\t\t-r Show removed text\n");
 	fprintf(stderr, "\t\t-s Show hidden (by Word) text\n");
 } /* end of vUsage */
 

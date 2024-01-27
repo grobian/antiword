@@ -38,7 +38,7 @@ vPrologue1(diagram_type *pDiag, const char *szTask, const char *szFilename)
 		vProloguePS(pDiag, szTask, szFilename, &tOptions);
 		break;
 	case conversion_xml:
-		vPrologueXML(pDiag);
+		vPrologueXML(pDiag, &tOptions);
 		break;
 	case conversion_pdf:
 		vProloguePDF(pDiag, szTask, &tOptions);
@@ -200,7 +200,7 @@ vPrologue2(diagram_type *pDiag, int iWordVersion)
 		vAddFontsPS(pDiag);
 		break;
 	case conversion_xml:
-		vCreateBookIntro(pDiag, iWordVersion, eEncoding);
+		vCreateBookIntro(pDiag, iWordVersion);
 		break;
 	case conversion_pdf:
 		vCreateInfoDictionary(pDiag, iWordVersion);
@@ -216,7 +216,8 @@ vPrologue2(diagram_type *pDiag, int iWordVersion)
  * vMove2NextLine - move to the next line
  */
 void
-vMove2NextLine(diagram_type *pDiag, draw_fontref tFontRef, USHORT usFontSize)
+vMove2NextLine(diagram_type *pDiag, drawfile_fontref tFontRef,
+	USHORT usFontSize)
 {
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
@@ -248,7 +249,7 @@ vMove2NextLine(diagram_type *pDiag, draw_fontref tFontRef, USHORT usFontSize)
 void
 vSubstring2Diagram(diagram_type *pDiag,
 	char *szString, size_t tStringLength, long lStringWidth,
-	UCHAR ucFontColor, USHORT usFontstyle, draw_fontref tFontRef,
+	UCHAR ucFontColor, USHORT usFontstyle, drawfile_fontref tFontRef,
 	USHORT usFontSize, USHORT usMaxFontSize)
 {
 	switch (eConversionType) {
@@ -339,7 +340,7 @@ vStartOfParagraph2(diagram_type *pDiag)
  */
 void
 vEndOfParagraph(diagram_type *pDiag,
-	draw_fontref tFontRef, USHORT usFontSize, long lAfterIndentation)
+	drawfile_fontref tFontRef, USHORT usFontSize, long lAfterIndentation)
 {
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
@@ -352,15 +353,13 @@ vEndOfParagraph(diagram_type *pDiag,
 		vEndOfParagraphTXT(pDiag, lAfterIndentation);
 		break;
 	case conversion_ps:
-		vEndOfParagraphPS(pDiag,
-				tFontRef, usFontSize, lAfterIndentation);
+		vEndOfParagraphPS(pDiag, usFontSize, lAfterIndentation);
 		break;
 	case conversion_xml:
 		vEndOfParagraphXML(pDiag, 1);
 		break;
 	case conversion_pdf:
-		vEndOfParagraphPDF(pDiag,
-				tFontRef, usFontSize, lAfterIndentation);
+		vEndOfParagraphPDF(pDiag, usFontSize, lAfterIndentation);
 		break;
 	default:
 		DBG_DEC(eConversionType);
@@ -372,7 +371,7 @@ vEndOfParagraph(diagram_type *pDiag,
  * Create an end of page
  */
 void
-vEndOfPage(diagram_type *pDiag, long lAfterIndentation)
+vEndOfPage(diagram_type *pDiag, long lAfterIndentation, BOOL bNewSection)
 {
 	switch (eConversionType) {
 	case conversion_text:
@@ -380,13 +379,13 @@ vEndOfPage(diagram_type *pDiag, long lAfterIndentation)
 		vEndOfPageTXT(pDiag, lAfterIndentation);
 		break;
 	case conversion_ps:
-		vEndOfPagePS(pDiag);
+		vEndOfPagePS(pDiag, bNewSection);
 		break;
 	case conversion_xml:
 		vEndOfPageXML(pDiag);
 		break;
 	case conversion_pdf:
-		vEndOfPagePDF(pDiag);
+		vEndOfPagePDF(pDiag, bNewSection);
 		break;
 	default:
 		DBG_DEC(eConversionType);
