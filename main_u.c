@@ -252,7 +252,7 @@ main(int argc, char **argv)
 
 #if !defined(__dos)
 	if (is_locale_utf8()) {
-#if defined(__STDC_ISO_10646__)
+#if defined(__STDC_ISO_10646__) || defined(__APPLE_CC__)
 		/*
 		 * If the user wants UTF-8 and the envirionment variables
 		 * support UTF-8, than set the locale accordingly
@@ -266,7 +266,7 @@ main(int argc, char **argv)
 		} else {
 			(void)setlocale(LC_CTYPE, "C");
 		}
-#endif /* __STDC_ISO_10646__ */
+#endif /* __STDC_ISO_10646__ || __APPLE_CC__ */
 	} else {
 		if (setlocale(LC_CTYPE, "") == NULL) {
 			werr(0, "Can't set the locale! Will use defaults");
