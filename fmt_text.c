@@ -44,6 +44,7 @@ vPrintFMT(FILE *pFile,
 	const char *szString, size_t tStringLength, USHORT usFontstyle)
 {
 	const UCHAR	*pucByte, *pucStart, *pucLast, *pucNonSpace;
+	BOOL bUTF8 = FALSE;
 
 	fail(szString == NULL);
 
@@ -52,8 +53,7 @@ vPrintFMT(FILE *pFile,
 	}
 
 	if (eEncoding == encoding_utf_8) {
-		fprintf(pFile, "%.*s", (int)tStringLength, szString);
-		return;
+		bUTF8 = TRUE;
 	}
 
 	if (ucNbsp == 0) {
@@ -64,14 +64,14 @@ vPrintFMT(FILE *pFile,
 	pucStart = (UCHAR *)szString;
 	pucLast = pucStart + tStringLength - 1;
 	pucNonSpace = pucLast;
-	while ((*pucNonSpace == (UCHAR)' ' || *pucNonSpace == ucNbsp) &&
+	while ((*pucNonSpace == (UCHAR)' ' || (!bUTF8 && *pucNonSpace == ucNbsp)) &&
 	       pucNonSpace > pucStart) {
 		pucNonSpace--;
 	}
 
 	/* 1: The spaces at the start */
 	pucByte = pucStart;
-	while ((*pucByte == (UCHAR)' ' || *pucByte == ucNbsp) &&
+	while ((*pucByte == (UCHAR)' ' || (!bUTF8 && *pucByte == ucNbsp)) &&
 	       pucByte <= pucLast) {
 		(void)putc(' ', pFile);
 		pucByte++;
@@ -95,7 +95,7 @@ vPrintFMT(FILE *pFile,
 
 	/* 3: The text itself */
 	while (pucByte <= pucNonSpace) {
-		if (*pucByte == ucNbsp) {
+		if (!bUTF8 && *pucByte == ucNbsp) {
 			(void)putc(' ', pFile);
 		} else {
 			(void)putc((char)*pucByte, pFile);
