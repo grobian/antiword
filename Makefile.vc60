@@ -26,14 +26,14 @@ LDFLAGS	=
 
 OBJS	=\
 	main_u.obj asc85enc.obj blocklist.obj chartrans.obj datalist.obj\
-	depot.obj dib2eps.obj fail.obj finddata.obj findtext.obj fontlist.obj\
-	fonts.obj fonts_u.obj imgexam.obj imgtrans.obj jpeg2eps.obj\
-	listlist.obj misc.obj notes.obj options.obj out2window.obj output.obj\
-	pictlist.obj png2eps.obj postscript.obj prop0.obj prop2.obj prop6.obj\
-	prop8.obj properties.obj propmod.obj rowlist.obj sectlist.obj\
-	stylelist.obj stylesheet.obj summary.obj tabstop.obj text.obj unix.obj\
-	utf8.obj word2text.obj worddos.obj wordlib.obj wordmac.obj wordole.obj\
-	wordwin.obj xmalloc.obj xml.obj getopt.obj
+	depot.obj dib2eps.obj fail.obj finddata.obj findtext.obj fmt_text.obj\
+	fontlist.obj fonts.obj fonts_u.obj imgexam.obj imgtrans.obj\
+	jpeg2eps.obj listlist.obj misc.obj notes.obj options.obj out2window.obj\
+	output.obj pdf.obj pictlist.obj png2eps.obj postscript.obj prop0.obj\
+	prop2.obj prop6.obj prop8.obj properties.obj propmod.obj rowlist.obj\
+	sectlist.obj stylelist.obj stylesheet.obj summary.obj tabstop.obj\
+	text.obj unix.obj utf8.obj word2text.obj worddos.obj wordlib.obj\
+	wordmac.obj wordole.obj wordwin.obj xmalloc.obj xml.obj getopt.obj
 
 PROG	= antiword.exe
 
@@ -57,4 +57,5 @@ $(PROG):	$(OBJS)
 
 main_u.obj:	version.h
 postscri.obj:	version.h
+pdf.obj:	version.h
 fonts_u.obj:	fontinfo.h

@@ -1,6 +1,6 @@
 /*
  * wordtypes.h
- * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GPL
  *
  * Description:
  * Typedefs for the interpretation of MS Word files
@@ -54,21 +54,26 @@ typedef enum conversion_tag {
 	conversion_text,
 	conversion_draw,
 	conversion_ps,
-	conversion_xml
+	conversion_xml,
+	conversion_pdf,
+	conversion_fmt_text
 } conversion_type;
 
 /* Types of encoding */
 typedef enum encoding_tag {
 	encoding_neutral = 100,
-	encoding_iso_8859_1 = 801,
-	encoding_iso_8859_2 = 802,
-	encoding_utf8 = 1601
+	encoding_latin_1 = 801,
+	encoding_latin_2 = 802,
+	encoding_cyrillic = 805,
+	encoding_utf_8 = 1601
 } encoding_type;
 
 /* Font translation table entry */
 typedef struct font_table_tag {
 	USHORT	usFontStyle;
 	UCHAR	ucWordFontNumber;
+	UCHAR	ucFFN;
+	UCHAR	ucEmphasis;
 	UCHAR	ucInUse;
 	char	szWordFontname[65];
 	char	szOurFontname[33];
@@ -106,10 +111,11 @@ typedef struct pps_tag {
 typedef struct pps_info_tag {
 	pps_type	tWordDocument;	/* Text stream */
 	pps_type	tData;		/* Data stream */
-	pps_type	t0Table;	/* Table 0 stream */
-	pps_type	t1Table;	/* Table 1 stream */
+	pps_type	tTable;		/* Table stream */
 	pps_type	tSummaryInfo;	/* Summary Information */
 	pps_type	tDocSummaryInfo;/* Document Summary Information */
+	pps_type	t0Table;	/* Table 0 stream */
+	pps_type	t1Table;	/* Table 1 stream */
 } pps_info_type;
 
 /* Record of data block information */
@@ -134,7 +140,6 @@ typedef struct row_block_tag {
 	ULONG	ulFileOffsetEnd;
 	ULONG	ulCharPosStart;
 	ULONG	ulCharPosEnd;
-	int	iColumnWidthSum;			/* In twips */
 	short	asColumnWidth[TABLE_COLUMN_MAX+1];	/* In twips */
 	UCHAR	ucNumberOfColumns;
 	UCHAR	ucBorderInfo;

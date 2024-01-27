@@ -1,6 +1,6 @@
 /*
  * postscript.c
- * Copyright (C) 1999-2003 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1999-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Functions to deal with the PostScript format
@@ -97,6 +97,35 @@ static const char *iso_8859_2_data[] = {
 "245/ohungarumlaut 246/odieresis 247/divide 248/rcaron 249/uring",
 "250/uacute 251/uhungarumlaut 252/udieresis 253/yacute 254/tcommaaccent",
 "255/dotaccent",
+"] bind def",
+"",
+"/reencdict 12 dict def",
+"",
+};
+
+static const char *iso_8859_5_data[] = {
+"/newcodes	% ISO-8859-5 character encodings",
+"[",
+"160/space     161/afii10023 162/afii10051 163/afii10052 164/afii10053",
+"165/afii10054 166/afii10055 167/afii10056 168/afii10057 169/afii10058",
+"170/afii10059 171/afii10060 172/afii10061 173/hyphen    174/afii10062",
+"175/afii10145 176/afii10017 177/afii10018 178/afii10019 179/afii10020",
+"180/afii10021 181/afii10022 182/afii10024 183/afii10025 184/afii10026",
+"185/afii10027 186/afii10028 187/afii10029 188/afii10030 189/afii10031",
+"190/afii10032 191/afii10033 192/afii10034 193/afii10035 194/afii10036",
+"195/afii10037 196/afii10038 197/afii10039 198/afii10040 199/afii10041",
+"200/afii10042 201/afii10043 202/afii10044 203/afii10045 204/afii10046",
+"205/afii10047 206/afii10048 207/afii10049 208/afii10065 209/afii10066",
+"210/afii10067 211/afii10068 212/afii10069 213/afii10070 214/afii10072",
+"215/afii10073 216/afii10074 217/afii10075 218/afii10076 219/afii10077",
+"220/afii10078 221/afii10079 222/afii10080 223/afii10081 224/afii10082",
+"225/afii10083 226/afii10084 227/afii10085 228/afii10086 229/afii10087",
+"230/afii10088 231/afii10089 232/afii10090 233/afii10091 234/afii10092",
+"235/afii10093 236/afii10094 237/afii10095 238/afii10096 239/afii10097",
+"240/afii61352 241/afii10071 242/afii10099 243/afii10100 244/afii10101",
+"245/afii10102 246/afii10103 247/afii10104 248/afii10105 249/afii10106",
+"250/afii10107 251/afii10108 252/afii10109 253/section   254/afii10110",
+"255/afii10193",
 "] bind def",
 "",
 "/reencdict 12 dict def",
@@ -207,13 +236,13 @@ vMove2NextPage(diagram_type *pDiag)
 } /* end of vMove2NextPage */
 
 /*
- * vMoveToPS - move to the specified X,Y coordinates
+ * vMoveTo - move to the specified X,Y coordinates
  *
  * Move the current position of the specified diagram to its X,Y coordinates,
  * start on a new page if needed
  */
 static void
-vMoveToPS(diagram_type *pDiag, long lLastVerticalMovement)
+vMoveTo(diagram_type *pDiag, long lLastVerticalMovement)
 {
 	fail(pDiag == NULL);
 	fail(pDiag->pOutFile == NULL);
@@ -231,7 +260,7 @@ vMoveToPS(diagram_type *pDiag, long lLastVerticalMovement)
 			dDrawUnits2Points(pDiag->lYtop));
 		lYtopCurr = pDiag->lYtop;
 	}
-} /* end of vMoveToPS */
+} /* end of vMoveTo */
 
 /*
  * vProloguePS - set options and perform the PostScript initialization
@@ -393,7 +422,7 @@ vImageProloguePS(diagram_type *pDiag, const imagedata_type *pImg)
 	DBG_DEC_C(pDiag->lXleft != 0, pDiag->lXleft);
 
 	pDiag->lYtop -= lPoints2DrawUnits(pImg->iVerSizeScaled);
-	vMoveToPS(pDiag, lPoints2DrawUnits(pImg->iVerSizeScaled));
+	vMoveTo(pDiag, lPoints2DrawUnits(pImg->iVerSizeScaled));
 
 	pOutFile = pDiag->pOutFile;
 
@@ -454,7 +483,7 @@ vImageProloguePS(diagram_type *pDiag, const imagedata_type *pImg)
 			fprintf(pOutFile,
 			"/Data Data1 << >> /FlateDecode filter def\n");
 		}
-		if (pImg->iComponents == 3) {
+		if (pImg->iComponents == 3 || pImg->iComponents == 4) {
 			fprintf(pOutFile, "/DeviceRGB setcolorspace\n");
 		} else if (pImg->iColorsUsed > 0) {
 			vPrintPalette(pOutFile, pImg);
@@ -613,7 +642,7 @@ bAddDummyImagePS(diagram_type *pDiag, const imagedata_type *pImg)
 	DBG_DEC_C(pDiag->lXleft != 0, pDiag->lXleft);
 
 	pDiag->lYtop -= lPoints2DrawUnits(pImg->iVerSizeScaled);
-	vMoveToPS(pDiag, lPoints2DrawUnits(pImg->iVerSizeScaled));
+	vMoveTo(pDiag, lPoints2DrawUnits(pImg->iVerSizeScaled));
 
 	pOutFile = pDiag->pOutFile;
 
@@ -688,7 +717,7 @@ vAddFontsPS(diagram_type *pDiag)
 	fprintf(pOutFile, "%%%%BeginProlog\n");
 
 	switch (eEncoding) {
-	case encoding_iso_8859_1:
+	case encoding_latin_1:
 		for (tIndex = 0;
 		     tIndex < elementsof(iso_8859_1_data);
 		     tIndex++) {
@@ -701,7 +730,7 @@ vAddFontsPS(diagram_type *pDiag)
 			fprintf(pOutFile, "%s\n", iso_8859_x_func[tIndex]);
 		}
 		break;
-	case encoding_iso_8859_2:
+	case encoding_latin_2:
 		for (tIndex = 0;
 		     tIndex < elementsof(iso_8859_2_data);
 		     tIndex++) {
@@ -714,7 +743,20 @@ vAddFontsPS(diagram_type *pDiag)
 			fprintf(pOutFile, "%s\n", iso_8859_x_func[tIndex]);
 		}
 		break;
-	case encoding_utf8:
+	case encoding_cyrillic:
+		for (tIndex = 0;
+		     tIndex < elementsof(iso_8859_5_data);
+		     tIndex++) {
+			fprintf(pOutFile, "%s\n", iso_8859_5_data[tIndex]);
+		}
+		fprintf(pOutFile, "\n");
+		for (tIndex = 0;
+		     tIndex < elementsof(iso_8859_x_func);
+		     tIndex++) {
+			fprintf(pOutFile, "%s\n", iso_8859_x_func[tIndex]);
+		}
+		break;
+	case encoding_utf_8:
 		werr(1,
 		"The combination PostScript and UTF-8 is not supported");
 		break;
@@ -881,7 +923,7 @@ vSubstringPS(diagram_type *pDiag,
 		vSetColor(pDiag->pOutFile, ucFontColor);
 		iFontColorCurr = (int)ucFontColor;
 	}
-	vMoveToPS(pDiag, lComputeLeading(usMaxFontSize));
+	vMoveTo(pDiag, lComputeLeading(usMaxFontSize));
 	vPrintPS(pDiag->pOutFile, szString, tStringLength, usFontstyle);
 	pDiag->lXleft += lStringWidth;
 } /* end of vSubstringPS */

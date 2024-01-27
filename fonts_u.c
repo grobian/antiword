@@ -1,6 +1,6 @@
 /*
  * fonts_u.c
- * Copyright (C) 1999-2002 A.J. van Os; Released under GPL
+ * Copyright (C) 1999-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Functions to deal with fonts (Unix version)
@@ -106,8 +106,8 @@ vCloseFont(void)
 {
 	NO_DBG_MSG("vCloseFont");
 	/* For safety: to be overwritten at the next call of tOpenfont() */
-	bUsePlainText = TRUE;
 	eEncoding = encoding_neutral;
+	bUsePlainText = TRUE;
 } /* end of vCloseFont */
 
 /*
@@ -120,7 +120,8 @@ tOpenFont(UCHAR ucWordFontNumber, USHORT usFontStyle, USHORT usWordFontSize)
 {
 	options_type	tOptions;
 	const char	*szOurFontname;
-	int	iIndex, iFontnumber;
+	size_t	tIndex;
+	int	iFontnumber;
 
 	NO_DBG_MSG("tOpenFont");
 	NO_DBG_DEC(ucWordFontNumber);
@@ -132,9 +133,10 @@ tOpenFont(UCHAR ucWordFontNumber, USHORT usFontStyle, USHORT usWordFontSize)
 	NO_DBG_HEX(usFontStyle);
 
 	vGetOptions(&tOptions);
-	bUsePlainText = tOptions.eConversionType != conversion_draw &&
-			tOptions.eConversionType != conversion_ps;
 	eEncoding = tOptions.eEncoding;
+	bUsePlainText = tOptions.eConversionType != conversion_draw &&
+			tOptions.eConversionType != conversion_ps &&
+			tOptions.eConversionType != conversion_pdf;
 
 	if (bUsePlainText) {
 		/* Plain text, no fonts */
@@ -149,10 +151,10 @@ tOpenFont(UCHAR ucWordFontNumber, USHORT usFontStyle, USHORT usWordFontSize)
 	}
 	NO_DBG_MSG(szOurFontname);
 
-	for (iIndex = 0; iIndex < (int)elementsof(szFontnames); iIndex++) {
-		if (STREQ(szFontnames[iIndex], szOurFontname)) {
-			NO_DBG_DEC(iIndex);
-			return (draw_fontref)iIndex;
+	for (tIndex = 0; tIndex < elementsof(szFontnames); tIndex++) {
+		if (STREQ(szFontnames[tIndex], szOurFontname)) {
+			NO_DBG_DEC(tIndex);
+			return (draw_fontref)tIndex;
 		}
 	}
 	return (draw_fontref)0;
@@ -172,9 +174,10 @@ tOpenTableFont(USHORT usWordFontSize)
 	NO_DBG_MSG("tOpenTableFont");
 
 	vGetOptions(&tOptions);
-	bUsePlainText = tOptions.eConversionType != conversion_draw &&
-			tOptions.eConversionType != conversion_ps;
 	eEncoding = tOptions.eEncoding;
+	bUsePlainText = tOptions.eConversionType != conversion_draw &&
+			tOptions.eConversionType != conversion_ps &&
+			tOptions.eConversionType != conversion_pdf;
 
 	if (bUsePlainText) {
 		/* Plain text, no fonts */
@@ -226,7 +229,7 @@ lComputeStringWidth(const char *szString, size_t tStringLength,
 		return 0;
 	}
 
-	if (eEncoding == encoding_utf8) {
+	if (eEncoding == encoding_utf_8) {
 		fail(!bUsePlainText);
 		return lChar2MilliPoints(
 			utf8_strwidth(szString, tStringLength));
@@ -237,14 +240,19 @@ lComputeStringWidth(const char *szString, size_t tStringLength,
 		return lChar2MilliPoints(tStringLength);
 	}
 
-	DBG_DEC_C(eEncoding != encoding_iso_8859_1 &&
-		eEncoding != encoding_iso_8859_2, eEncoding);
-	fail(eEncoding != encoding_iso_8859_1 &&
-		eEncoding != encoding_iso_8859_2);
+	if (eEncoding == encoding_cyrillic) {
+		/* FIXME: until the character tables are available */
+		return (tStringLength * 600L * (long)usFontSize + 1) / 2;
+	}
+
+	DBG_DEC_C(eEncoding != encoding_latin_1 &&
+		eEncoding != encoding_latin_2, eEncoding);
+	fail(eEncoding != encoding_latin_1 &&
+		eEncoding != encoding_latin_2);
 
 	/* Compute the relative string width */
 	iFontRef = (int)(UCHAR)tFontRef;
-	if (eEncoding == encoding_iso_8859_2) {
+	if (eEncoding == encoding_latin_2) {
 		ausCharWidths = ausCharacterWidths2[iFontRef];
 	} else {
 		ausCharWidths = ausCharacterWidths1[iFontRef];
@@ -257,7 +265,7 @@ lComputeStringWidth(const char *szString, size_t tStringLength,
 	}
 
 	/* Compute the absolute string width */
-	return (lRelWidth * usFontSize + 1) / 2;
+	return (lRelWidth * (long)usFontSize + 1) / 2;
 } /* end of lComputeStringWidth */
 
 /*
@@ -273,7 +281,7 @@ tCountColumns(const char *szString, size_t tLength)
 {
 	fail(szString == NULL);
 
-	if (eEncoding != encoding_utf8) {
+	if (eEncoding != encoding_utf_8) {
 		/* One byte, one character, one column */
 		return tLength;
 	}
@@ -290,7 +298,7 @@ tGetCharacterLength(const char *szString)
 {
 	fail(szString == NULL);
 
-	if (eEncoding != encoding_utf8) {
+	if (eEncoding != encoding_utf_8) {
 		return 1;
 	}
 	return (size_t)utf8_chrlength(szString);

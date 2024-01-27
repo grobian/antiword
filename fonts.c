@@ -1,6 +1,6 @@
 /*
  * fonts.c
- * Copyright (C) 1998-2003 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Functions to deal with fonts (generic)
@@ -86,6 +86,55 @@ iFontname2Fontnumber(const char *szOurFontname, USHORT usFontStyle)
 } /* end of iFontname2Fontnumber */
 
 /*
+ * szGetDefaultFont - get the default font that matches the parameters
+ */
+static const char *
+szGetDefaultFont(UCHAR ucFFN, int iEmphasis)
+{
+	UCHAR	ucPrq, ucFf;
+
+	fail(iEmphasis < 0 || iEmphasis > 3);
+
+	ucPrq = ucFFN & 0x03;
+	ucFf = (ucFFN & 0x70) >> 4;
+	NO_DBG_DEC(ucPrq);
+	NO_DBG_DEC(ucFf);
+	if (ucPrq == PITCH_FIXED) {
+		/* Set to the default monospaced font */
+		switch (iEmphasis) {
+		case 1: return FONT_MONOSPACED_BOLD;
+		case 2: return FONT_MONOSPACED_ITALIC;
+		case 3: return FONT_MONOSPACED_BOLDITALIC;
+		default: return FONT_MONOSPACED_PLAIN;
+		}
+	} else if (ucFf == FAMILY_ROMAN) {
+		/* Set to the default serif font */
+		switch (iEmphasis) {
+		case 1: return FONT_SERIF_BOLD;
+		case 2: return FONT_SERIF_ITALIC;
+		case 3: return FONT_SERIF_BOLDITALIC;
+		default: return FONT_SERIF_PLAIN;
+		}
+	} else if (ucFf == FAMILY_SWISS) {
+		/* Set to the default sans serif font */
+		switch (iEmphasis) {
+		case 1: return FONT_SANS_SERIF_BOLD;
+		case 2: return FONT_SANS_SERIF_ITALIC;
+		case 3: return FONT_SANS_SERIF_BOLDITALIC;
+		default: return FONT_SANS_SERIF_PLAIN;
+		}
+	} else {
+		/* Set to the default default font */
+		switch (iEmphasis) {
+		case 1: return FONT_SERIF_BOLD;
+		case 2: return FONT_SERIF_ITALIC;
+		case 3: return FONT_SERIF_BOLDITALIC;
+		default: return FONT_SERIF_PLAIN;
+		}
+	}
+} /* end of szGetDefaultFont */
+
+/*
  * See if the fontname from the Word file matches the fontname from the
  * font translation file.
  * If iBytesPerChar is one than aucWord is in ISO-8859-x (Word 2/6/7),
@@ -121,7 +170,6 @@ vFontname2Table(const UCHAR *aucFont, const UCHAR *aucAltFont,
 	font_table_type *pFontTableRecord)
 {
 	BOOL	bMatchFound;
-	UCHAR	ucPrq, ucFf;
 
 	fail(aucFont == NULL || aucFont[0] == 0);
 	fail(aucAltFont != NULL && aucAltFont[0] == 0);
@@ -145,38 +193,7 @@ vFontname2Table(const UCHAR *aucFont, const UCHAR *aucAltFont,
 		 * szWordFont contains a "*", so szOurFont will contain the
 		 * "default default" font. See if we can do better than that.
 		 */
-		ucPrq = ucFFN & 0x03;
-		ucFf = (ucFFN & 0x70) >> 4;
-		NO_DBG_DEC(ucPrq);
-		NO_DBG_DEC(ucFf);
-		if (ucPrq == PITCH_FIXED) {
-			/* Set to the default monospaced font */
-			switch (iEmphasis) {
-			case 0: szOurFont = FONT_MONOSPACED_PLAIN; break;
-			case 1: szOurFont = FONT_MONOSPACED_BOLD; break;
-			case 2: szOurFont = FONT_MONOSPACED_ITALIC; break;
-			case 3: szOurFont = FONT_MONOSPACED_BOLDITALIC; break;
-			default: break;
-			}
-		} else if (ucFf == FAMILY_ROMAN) {
-			/* Set to the default serif font */
-			switch (iEmphasis) {
-			case 0: szOurFont = FONT_SERIF_PLAIN; break;
-			case 1: szOurFont = FONT_SERIF_BOLD; break;
-			case 2: szOurFont = FONT_SERIF_ITALIC; break;
-			case 3: szOurFont = FONT_SERIF_BOLDITALIC; break;
-			default: break;
-			}
-		} else if (ucFf == FAMILY_SWISS) {
-			/* Set to the default sans serif font */
-			switch (iEmphasis) {
-			case 0: szOurFont = FONT_SANS_SERIF_PLAIN; break;
-			case 1: szOurFont = FONT_SANS_SERIF_BOLD; break;
-			case 2: szOurFont = FONT_SANS_SERIF_ITALIC; break;
-			case 3: szOurFont = FONT_SANS_SERIF_BOLDITALIC; break;
-			default: break;
-			}
-		}
+		szOurFont = szGetDefaultFont(ucFFN, iEmphasis);
 		bMatchFound = TRUE;
 	}
 
@@ -205,6 +222,8 @@ vFontname2Table(const UCHAR *aucFont, const UCHAR *aucAltFont,
 			sizeof(pFontTableRecord->szOurFontname) - 1] = '\0';
 		NO_DBG_MSG(pFontTableRecord->szWordFontname);
 		NO_DBG_MSG(pFontTableRecord->szOurFontname);
+		pFontTableRecord->ucFFN = ucFFN;
+		pFontTableRecord->ucEmphasis = (UCHAR)iEmphasis;
 	}
 } /* end of vFontname2Table */
 
@@ -531,9 +550,9 @@ vCreate2FontTable(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 	tFontInfoLen = (size_t)usGetWord(0xb6, aucHeader); /* cbSttbfffn */
 	DBG_DEC(tFontInfoLen);
 
-	if (ulBeginFontInfo > (ULONG)LONG_MAX) {
+	if (ulBeginFontInfo > (ULONG)LONG_MAX || tFontInfoLen == 0) {
 		/* Don't ask me why this is needed */
-		DBG_HEX(ulBeginFontInfo);
+		DBG_HEX_C(tFontInfoLen != 0, ulBeginFontInfo);
 		(void)fclose(pFontTableFile);
 		return;
 	}
@@ -760,11 +779,9 @@ vCreate8FontTable(FILE *pFile, const pps_info_type *pPPS,
 	UCHAR	*aucFont, *aucAltFont;
 	UCHAR	*aucBuffer;
 	ULONG	ulBeginFontInfo;
-	ULONG	ulTableSize, ulTableStartBlock;
 	size_t	tFontInfoLen, tBlockDepotLen, tBlockSize;
 	int	iPos, iRecLen, iOffsetAltName;
 	int	iBold, iItalic, iSpecial, iEmphasis;
-	USHORT	usDocStatus;
 	UCHAR	ucFFN;
 	char	szWordFont[FONT_LINE_LENGTH], szOurFont[FONT_LINE_LENGTH];
 
@@ -786,24 +803,15 @@ vCreate8FontTable(FILE *pFile, const pps_info_type *pPPS,
 	DBG_DEC(tFontInfoLen);
 	fail(tFontInfoLen < 46);
 
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		ulTableStartBlock = pPPS->t1Table.ulSB;
-		ulTableSize = pPPS->t1Table.ulSize;
-	} else {
-		ulTableStartBlock = pPPS->t0Table.ulSB;
-		ulTableSize = pPPS->t0Table.ulSize;
-	}
-	DBG_DEC(ulTableStartBlock);
-	if (ulTableStartBlock == 0) {
-		DBG_DEC(ulTableStartBlock);
+	DBG_DEC(pPPS->tTable.ulSB);
+	DBG_HEX(pPPS->tTable.ulSize);
+	if (pPPS->tTable.ulSize == 0) {
 		DBG_MSG("No fontname table");
 		(void)fclose(pFontTableFile);
 		return;
 	}
-	DBG_HEX(ulTableSize);
-	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+
+	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
 		/* Use the Small Block Depot */
 		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
@@ -815,7 +823,7 @@ vCreate8FontTable(FILE *pFile, const pps_info_type *pPPS,
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tFontInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucBuffer, ulBeginFontInfo, tFontInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
@@ -903,7 +911,7 @@ pGetNextFontTableRecord(const font_table_type *pRecordCurr)
 		return NULL;
 	}
 
-	tIndexCurr = pRecordCurr - pFontTable;
+	tIndexCurr = (size_t)(pRecordCurr - pFontTable);
 	if (tIndexCurr + 1 < tFontTableRecords) {
 		/* There is a next record, so return it */
 		return &pFontTable[tIndexCurr + 1];
@@ -922,3 +930,89 @@ tGetFontTableLength(void)
 {
 	return tFontTableRecords;
 } /* end of tGetFontTableLength */
+
+#if !defined(__riscos)
+/*
+ * vCorrect4PDF - only include PDF default fonts
+ */
+static void
+vCorrect4PDF(void)
+{
+	font_table_type	*pTmp;
+	const char	*szOurFont;
+
+	for (pTmp = pFontTable; pTmp < pFontTable + tFontTableRecords; pTmp++) {
+		if (STRCEQ(pTmp->szOurFontname, FONT_MONOSPACED_PLAIN) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_MONOSPACED_BOLD) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_MONOSPACED_ITALIC) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_MONOSPACED_BOLDITALIC) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_SERIF_PLAIN) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_SERIF_BOLD) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_SERIF_ITALIC) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_SERIF_BOLDITALIC) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_SANS_SERIF_PLAIN) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_SANS_SERIF_BOLD) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_SANS_SERIF_ITALIC) ||
+		    STRCEQ(pTmp->szOurFontname, FONT_SANS_SERIF_BOLDITALIC)) {
+			/* Already a default font */
+			continue;
+		}
+		szOurFont =
+			szGetDefaultFont(pTmp->ucFFN, (int)pTmp->ucEmphasis);
+		(void)strncpy(pTmp->szOurFontname, szOurFont,
+			sizeof(pTmp->szOurFontname) - 1);
+		pTmp->szOurFontname[sizeof(pTmp->szOurFontname) - 1] = '\0';
+	}
+} /* end of vCorrect4PDF */
+
+/*
+ * vCorrect4CyrPS - only include monospaced fonts
+ */
+static void
+vCorrect4CyrPS(void)
+{
+	font_table_type	*pTmp;
+	const char	*szOurFont;
+	UCHAR	ucFFN;
+
+	ucFFN = (FAMILY_UNKNOWN << 4) | PITCH_FIXED;
+	for (pTmp = pFontTable; pTmp < pFontTable + tFontTableRecords; pTmp++) {
+		szOurFont = szGetDefaultFont(ucFFN, (int)pTmp->ucEmphasis);
+		(void)strncpy(pTmp->szOurFontname, szOurFont,
+			sizeof(pTmp->szOurFontname) - 1);
+		pTmp->szOurFontname[sizeof(pTmp->szOurFontname) - 1] = '\0';
+	}
+} /* end of vCorrect4CyrPS */
+#endif /* __riscos */
+
+/*
+ * vCorrectFontTable - correct the font table in special cases
+ */
+void
+vCorrectFontTable(conversion_type eConversionType, encoding_type eEncoding)
+{
+#if !defined(__riscos)
+	if (eConversionType == conversion_pdf) {
+		vCorrect4PDF();
+	}
+	if (eConversionType == conversion_ps &&
+	    eEncoding == encoding_cyrillic) {
+		vCorrect4CyrPS();
+	}
+#endif /* __riscos */
+} /* end of vCorrectFontTable */
+
+/*
+ * lComputeSpaceWidth - compute the width of a space character
+ *
+ * Returns the space width in millipoints
+ */
+long
+lComputeSpaceWidth(draw_fontref tFontRef, USHORT usFontSize)
+{
+	char	szSpace[] = " ";
+
+	fail(usFontSize < MIN_FONT_SIZE || usFontSize > MAX_FONT_SIZE);
+
+        return lComputeStringWidth(szSpace, 1, tFontRef, usFontSize);
+} /* end of lComputeSpaceWidth */

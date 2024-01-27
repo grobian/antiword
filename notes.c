@@ -1,6 +1,6 @@
 /*
  * notes.c
- * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Functions to tell the difference between footnotes and endnotes
@@ -166,10 +166,8 @@ vGet8FootnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 	const ULONG	*aulBlockDepot;
 	UCHAR	*aucBuffer;
 	ULONG	ulFileOffset, ulBeginOfText, ulOffset, ulBeginFootnoteInfo;
-	ULONG	ulTableSize, ulTableStartBlock;
 	size_t	tFootnoteInfoLen, tBlockDepotLen, tBlockSize;
 	int	iIndex;
-	USHORT	usDocStatus;
 
 	ulBeginOfText = ulGetLong(0x18, aucHeader);
 	NO_DBG_HEX(ulBeginOfText);
@@ -183,22 +181,14 @@ vGet8FootnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 		return;
 	}
 
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		ulTableStartBlock = pPPS->t1Table.ulSB;
-		ulTableSize = pPPS->t1Table.ulSize;
-	} else {
-		ulTableStartBlock = pPPS->t0Table.ulSB;
-		ulTableSize = pPPS->t0Table.ulSize;
-	}
-	NO_DBG_DEC(ulTableStartBlock);
-	if (ulTableStartBlock == 0) {
-		DBG_MSG("No notes information");
+	NO_DBG_DEC(pPPS->tTable.ulSB);
+	NO_DBG_HEX(pPPS->tTable.ulSize);
+	if (pPPS->tTable.ulSize == 0) {
+		DBG_MSG("No footnotes information");
 		return;
 	}
-	NO_DBG_HEX(ulTableSize);
-	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+
+	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
 	  	/* Use the Small Block Depot */
 		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
@@ -210,7 +200,7 @@ vGet8FootnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tFootnoteInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucBuffer, ulBeginFootnoteInfo, tFootnoteInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
@@ -247,10 +237,8 @@ vGet8EndnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 	const ULONG	*aulBlockDepot;
 	UCHAR	*aucBuffer;
 	ULONG	ulFileOffset, ulBeginOfText, ulOffset, ulBeginEndnoteInfo;
-	ULONG	ulTableSize, ulTableStartBlock;
 	size_t	tEndnoteInfoLen, tBlockDepotLen, tBlockSize;
 	int	iIndex;
-	USHORT	usDocStatus;
 
 	ulBeginOfText = ulGetLong(0x18, aucHeader);
 	NO_DBG_HEX(ulBeginOfText);
@@ -260,26 +248,18 @@ vGet8EndnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 	NO_DBG_DEC(tEndnoteInfoLen);
 
 	if (tEndnoteInfoLen < 10) {
-		DBG_MSG("No Endnotes in this document");
+		DBG_MSG("No endnotes in this document");
 		return;
 	}
 
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		ulTableStartBlock = pPPS->t1Table.ulSB;
-		ulTableSize = pPPS->t1Table.ulSize;
-	} else {
-		ulTableStartBlock = pPPS->t0Table.ulSB;
-		ulTableSize = pPPS->t0Table.ulSize;
-	}
-	NO_DBG_DEC(ulTableStartBlock);
-	if (ulTableStartBlock == 0) {
-		DBG_MSG("No notes information");
+	NO_DBG_DEC(pPPS->tTable.ulSB);
+	NO_DBG_HEX(pPPS->tTable.ulSize);
+	if (pPPS->tTable.ulSize == 0) {
+		DBG_MSG("No endnotes information");
 		return;
 	}
-	NO_DBG_HEX(ulTableSize);
-	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+
+	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
 	  	/* Use the Small Block Depot */
 		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
@@ -291,7 +271,7 @@ vGet8EndnotesInfo(FILE *pFile, const pps_info_type *pPPS,
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tEndnoteInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucBuffer, ulBeginEndnoteInfo, tEndnoteInfoLen)) {
 		aucBuffer = xfree(aucBuffer);

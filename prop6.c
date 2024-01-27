@@ -1,6 +1,6 @@
 /*
  * prop6.c
- * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GPL
  *
  * Description:
  * Read the property information from a MS Word 6 or 7 file
@@ -310,7 +310,6 @@ eGet6RowInfo(int iFodo,
 				werr(1, "The number of columns is corrupt");
 			}
 			pRow->ucNumberOfColumns = (UCHAR)iCol;
-			pRow->iColumnWidthSum = 0;
 			iPosPrev = (int)(short)usGetWord(
 					iFodo + iFodoOff + 4,
 					aucGrpprl);
@@ -320,8 +319,6 @@ eGet6RowInfo(int iFodo,
 					aucGrpprl);
 				pRow->asColumnWidth[iIndex] =
 						(short)(iPosCurr - iPosPrev);
-				pRow->iColumnWidthSum +=
-					pRow->asColumnWidth[iIndex];
 				iPosPrev = iPosCurr;
 			}
 			bFound190 = TRUE;
@@ -413,6 +410,7 @@ vGet6StyleInfo(int iFodo,
 				eGetNumType(ucTmp) == level_type_pause;
 			break;
 		case  15:	/* ChgTabsPapx */
+		case  23:	/* ChgTabs */
 			iTmp = (int)ucGetByte(iFodo + iFodoOff + 1, aucGrpprl);
 			if (iTmp < 2) {
 				iInfoLen = 1;

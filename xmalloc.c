@@ -1,6 +1,6 @@
 /*
  * xmalloc.c
- * Copyright (C) 1998-2003 A.J. van Os
+ * Copyright (C) 1998-2004 A.J. van Os
  *
  * Description:
  * Extended malloc and friends
@@ -11,12 +11,12 @@
 #include "antiword.h"
 
 #if !defined(DMALLOC)
-static char *szWarning =
+static char *szMessage =
 	"Memory allocation failed, unable to continue";
-#if defined(__dos)
-static char *szDosWarning =
+#if defined(__dos) && !defined(__DJGPP__)
+static char *szDosMessage =
 	"DOS can't allocate this kind of memory, unable to continue";
-#endif /* __dos */
+#endif /* __dos && !__DJGPP__ */
 
 
 /*
@@ -35,7 +35,9 @@ xmalloc(size_t tSize)
 	}
 	pvTmp = malloc(tSize);
 	if (pvTmp == NULL) {
-		werr(1, szWarning);
+		DBG_MSG("xmalloc");
+		DBG_DEC(tSize);
+		werr(1, szMessage);
 	}
 	return pvTmp;
 } /* end of xmalloc */
@@ -50,11 +52,12 @@ xcalloc(size_t tNmemb, size_t tSize)
 {
 	void	*pvTmp;
 
-#if defined(__dos)
+#if defined(__dos) && !defined(__DJGPP__)
 	if ((ULONG)tNmemb * (ULONG)tSize > 0xffffUL) {
-		werr(1, szDosWarning);
+		DBG_DEC((ULONG)tNmemb * (ULONG)tSize);
+		werr(1, szDosMessage);
 	}
-#endif /* __dos */
+#endif /* __dos && !__DJGPP__ */
 
 	if (tNmemb == 0 || tSize == 0) {
 		tNmemb = 1;
@@ -62,7 +65,8 @@ xcalloc(size_t tNmemb, size_t tSize)
 	}
 	pvTmp = calloc(tNmemb, tSize);
 	if (pvTmp == NULL) {
-		werr(1, szWarning);
+		DBG_MSG("xcalloc");
+		werr(1, szMessage);
 	}
 	return pvTmp;
 } /* end of xcalloc */
@@ -80,7 +84,8 @@ xrealloc(void *pvArg, size_t tSize)
 
 	pvTmp = realloc(pvArg, tSize);
 	if (pvTmp == NULL) {
-		werr(1, szWarning);
+		DBG_MSG("xrealloc");
+		werr(1, szMessage);
 	}
 	return pvTmp;
 } /* end of xrealloc */

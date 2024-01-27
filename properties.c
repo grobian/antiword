@@ -1,6 +1,6 @@
 /*
  * properties.c
- * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Read the properties information from a MS Word file
@@ -28,16 +28,24 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 	fail(aulSBD == NULL && tSBDLen != 0);
 	fail(aucHeader == NULL);
 
+	/* Get the options */
 	vGetOptions(&tOptions);
 
+	/* Get the property information per Word version */
 	switch (iWordVersion) {
 	case 0:
 		vGet0SepInfo(pFile, aucHeader);
 		vGet0PapInfo(pFile, aucHeader);
 		if (tOptions.eConversionType == conversion_draw ||
 		    tOptions.eConversionType == conversion_ps ||
-		    tOptions.eConversionType == conversion_xml) {
+		    tOptions.eConversionType == conversion_xml ||
+		    tOptions.eConversionType == conversion_fmt_text ||
+		    tOptions.eConversionType == conversion_pdf) {
 			vGet0ChrInfo(pFile, aucHeader);
+		}
+		if (tOptions.eConversionType == conversion_draw ||
+		    tOptions.eConversionType == conversion_ps ||
+		    tOptions.eConversionType == conversion_pdf) {
 			vCreate0FontTable();
 		}
 		vSet0SummaryInfo(pFile, aucHeader);
@@ -49,8 +57,14 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 		vGet2PapInfo(pFile, aucHeader);
 		if (tOptions.eConversionType == conversion_draw ||
 		    tOptions.eConversionType == conversion_ps ||
-		    tOptions.eConversionType == conversion_xml) {
+		    tOptions.eConversionType == conversion_xml ||
+		    tOptions.eConversionType == conversion_fmt_text ||
+		    tOptions.eConversionType == conversion_pdf) {
 			vGet2ChrInfo(pFile, iWordVersion, aucHeader);
+		}
+		if (tOptions.eConversionType == conversion_draw ||
+		    tOptions.eConversionType == conversion_ps ||
+		    tOptions.eConversionType == conversion_pdf) {
 			vCreate2FontTable(pFile, iWordVersion, aucHeader);
 		}
 		vSet2SummaryInfo(pFile, iWordVersion, aucHeader);
@@ -68,9 +82,15 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 			aulBBD, tBBDLen, aucHeader);
 		if (tOptions.eConversionType == conversion_draw ||
 		    tOptions.eConversionType == conversion_ps ||
-		    tOptions.eConversionType == conversion_xml) {
+		    tOptions.eConversionType == conversion_xml ||
+		    tOptions.eConversionType == conversion_fmt_text ||
+		    tOptions.eConversionType == conversion_pdf) {
 			vGet6ChrInfo(pFile, pPPS->tWordDocument.ulSB,
 				aulBBD, tBBDLen, aucHeader);
+		}
+		if (tOptions.eConversionType == conversion_draw ||
+		    tOptions.eConversionType == conversion_ps ||
+		    tOptions.eConversionType == conversion_pdf) {
 			vCreate6FontTable(pFile, pPPS->tWordDocument.ulSB,
 				aulBBD, tBBDLen, aucHeader);
 		}
@@ -88,9 +108,15 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 			aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 		if (tOptions.eConversionType == conversion_draw ||
 		    tOptions.eConversionType == conversion_ps ||
-		    tOptions.eConversionType == conversion_xml) {
+		    tOptions.eConversionType == conversion_xml ||
+		    tOptions.eConversionType == conversion_fmt_text ||
+		    tOptions.eConversionType == conversion_pdf) {
 			vGet8ChrInfo(pFile, pPPS,
 				aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
+		}
+		if (tOptions.eConversionType == conversion_draw ||
+		    tOptions.eConversionType == conversion_ps ||
+		    tOptions.eConversionType == conversion_pdf) {
 			vCreate8FontTable(pFile, pPPS,
 				aulBBD, tBBDLen, aulSBD, tSBDLen, aucHeader);
 		}
@@ -103,6 +129,9 @@ vGetPropertyInfo(FILE *pFile, const pps_info_type *pPPS,
 		werr(0, "Sorry, no property information");
 		break;
 	}
+
+	/* Temporarily: Correct the font table */
+	vCorrectFontTable(tOptions.eConversionType, tOptions.eEncoding);
 } /* end of vGetPropertyInfo */
 
 /*

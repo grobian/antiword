@@ -438,6 +438,16 @@ ulGetDocumentLength(void)
 #endif /* __riscos */
 
 /*
+ * bExistsHdrFtr - are there headers and/or footers?
+ */
+BOOL
+bExistsHdrFtr(void)
+{
+	return pHdrFtrAnchor != NULL &&
+		pHdrFtrAnchor->tInfo.ulLength != 0;
+} /* end of bExistsHdrFtr */
+
+/*
  * bExistsTextBox - is there a text box?
  */
 BOOL
@@ -456,6 +466,7 @@ bExistsHdrTextBox(void)
 	return pHdrTextBoxAnchor != NULL &&
 		pHdrTextBoxAnchor->tInfo.ulLength != 0;
 } /* end of bExistsHdrTextBox */
+
 /*
  * usGetNextByte - get the next byte from the specified block list
  */

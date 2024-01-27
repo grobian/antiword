@@ -1,6 +1,6 @@
 /*
  * stylesheet.c
- * Copyright (C) 2001-2003 A.J. van Os; Released under GPL
+ * Copyright (C) 2001-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Build, read and destroy a list of stylesheet information
@@ -91,26 +91,6 @@ iGetStyleIndex(USHORT usIstd)
 } /* end of iGetStyleIndex */
 
 /*
- * Convert a stylecode (stc) as used by WinWord 2 into a styleindex (istd)
- * as used by Word 6 and up
- */
-USHORT
-usStc2istd(UCHAR ucStc)
-{
-	/* Old nil style to new nil style */
-	if (ucStc == 222) {
-		return STI_NIL;
-	}
-	/* Heading 1 through 9 must become istd 1 through 9 */
-	/* so 254 through 246 must become 1 through 9 and vice versa */
-	if ((ucStc >= 1 && ucStc <= 9) ||
-	    (ucStc >= 246 && ucStc <= 254)) {
-		return 255 - (USHORT)ucStc;
-	}
-	return (USHORT)ucStc;
-} /* end of usStd2istd */
-
-/*
  * Get a build-in style for Winword 1/2
  */
 static void
@@ -121,7 +101,7 @@ vGetBuildinStyle(UCHAR ucStc, style_block_type *pStyle)
 	/* Start with de defaults */
 	vGetDefaultStyle(pStyle);
 
-	/* Add the build-in style */
+	/* Add the build-in style info */
 	switch (ucStc) {
 	case 246:
 	case 247:
@@ -164,7 +144,7 @@ vGetBuildinFont(UCHAR ucStc, font_block_type *pFont)
 	/* Start with de defaults */
 	vGetDefaultFont(pFont, 0);
 
-	/* Add the build-in fontstyle */
+	/* Add the build-in fontstyle info */
 	switch (ucStc) {
 	case 223:
 	case 244:
@@ -205,6 +185,27 @@ vGetBuildinFont(UCHAR ucStc, font_block_type *pFont)
 } /* end of vGetBuildinFont */
 
 /*
+ * Convert a stylecode (stc) as used by WinWord 1/2 into a styleindex (istd)
+ * as used by Word 6 and up
+ */
+USHORT
+usStc2istd(UCHAR ucStc)
+{
+	/* Old nil style to new nil style */
+	if (ucStc == 222) {
+		return STI_NIL;
+	}
+
+	/* Heading 1 through 9 must become istd 1 through 9 */
+	/* so 254 through 246 must become 1 through 9 and vice versa */
+	if ((ucStc >= 1 && ucStc <= 9) ||
+	    (ucStc >= 246 && ucStc <= 254)) {
+		return 255 - (USHORT)ucStc;
+	}
+	return (USHORT)ucStc;
+} /* end of usStd2istd */
+
+/*
  * Build the lists with Stylesheet Information for WinWord 1/2 files
  */
 void
@@ -214,8 +215,8 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 	font_block_type		*pFont;
 	UCHAR	*aucBuffer;
 	ULONG	ulBeginStshInfo;
-	size_t	tStshInfoLen, tName, tChpx, tPapx;
-	int	iStIndex, iChpxIndex, iPapxIndex, iMaxIndex, iSt, iChpx, iPapx;
+	size_t	tStshInfoLen, tName, tChpx, tPapx, tMaxIndex;
+	int	iStIndex, iChpxIndex, iPapxIndex, iSt, iChpx, iPapx;
 	int	iStd, iIndex, iBaseStyleIndex, iCounter;
 	USHORT	usBaseStyle;
 	UCHAR	ucStc, ucStcNext, ucStcBase;
@@ -235,14 +236,22 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 	}
 	NO_DBG_PRINT_BLOCK(aucBuffer, tStshInfoLen);
 
+	fail(2 > tStshInfoLen);
 	iStd = (int)usGetWord(0, aucBuffer);
+
+	fail(2 + 2 > tStshInfoLen);
 	tName = (size_t)usGetWord(2, aucBuffer);
+
+	fail(2 + tName + 2 > tStshInfoLen);
 	tChpx = (size_t)usGetWord(2 + tName, aucBuffer);
+
+	fail(2 + tName + tChpx + 2 > tStshInfoLen);
 	tPapx = (size_t)usGetWord(2 + tName + tChpx, aucBuffer);
+
+	fail(2 + tName + tChpx + tPapx + 2 > tStshInfoLen);
 	tStdCount = (size_t)usGetWord(2 + tName + tChpx + tPapx, aucBuffer);
 
 	NO_DBG_HEX(tStdCount);
-	fail(2 + tName + tChpx + tPapx + 2 + 2 * tStdCount > tStshInfoLen);
 
 	atStyleInfo = xcalloc(tStdCount, sizeof(style_block_type));
 	atFontInfo = xcalloc(tStdCount, sizeof(font_block_type));
@@ -253,7 +262,7 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 		iStIndex = 2 + 2;
 		iChpxIndex = 2 + (int)tName + 2;
 		iPapxIndex = 2 + (int)tName + (int)tChpx + 2;
-		iMaxIndex = 2 + (int)tName + (int)tChpx + (int)tPapx + 2;
+		tMaxIndex = 2 + tName + tChpx + tPapx + 2;
 		/* Read the styles one-by-one */
 		for (iIndex = 0; iIndex < (int)tStdCount; iIndex++) {
 			pStyle = &atStyleInfo[iIndex];
@@ -264,12 +273,12 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 			NO_DBG_HEX(iSt);
 			NO_DBG_HEX(iChpx);
 			NO_DBG_HEX(iPapx);
-			if (iSt == 0xff) {
-				/* Undefined style */
+			if (iSt == 0xff || tMaxIndex + 1 >= tStshInfoLen) {
+				/* Undefined style or no information */
 				iStIndex++;
 				iChpxIndex++;
 				iPapxIndex++;
-				iMaxIndex += 2;
+				tMaxIndex += 2;
 				if (!abFilled[iIndex]) {
 					DBG_HEX_C(iChpx != 0xff, iChpx);
 					DBG_HEX_C(iPapx != 0xff, iPapx);
@@ -283,8 +292,8 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 			NO_DBG_STRN(aucBuffer + iStIndex + 1, iSt);
 			iStIndex += iSt + 1;
 
-			ucStcNext = ucGetByte(iMaxIndex, aucBuffer);
-			ucStcBase = ucGetByte(iMaxIndex + 1, aucBuffer);
+			ucStcNext = ucGetByte(tMaxIndex, aucBuffer);
+			ucStcBase = ucGetByte(tMaxIndex + 1, aucBuffer);
 			ucStc = (UCHAR)((iIndex - iStd) & 0xff);
 			NO_DBG_DEC(ucStc);
 
@@ -292,7 +301,7 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 				/* Use a build-in style */
 				iChpxIndex++;
 				iPapxIndex++;
-				iMaxIndex += 2;
+				tMaxIndex += 2;
 				if (!abFilled[iIndex]) {
 					DBG_HEX_C(iChpx != 0xff, iChpx);
 					DBG_HEX_C(iPapx != 0xff, iPapx);
@@ -310,7 +319,7 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 				/* This record has already been filled */
 				iChpxIndex += iChpx + 1;
 				iPapxIndex += iPapx + 1;
-				iMaxIndex += 2;
+				tMaxIndex += 2;
 				continue;
 			}
 
@@ -327,7 +336,7 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 					/* This style is not known yet */
 					iChpxIndex += iChpx + 1;
 					iPapxIndex += iPapx + 1;
-					iMaxIndex += 2;
+					tMaxIndex += 2;
 					continue;
 				}
 				fail(iBaseStyleIndex >= (int)tStdCount);
@@ -377,12 +386,13 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 				iPapxIndex += iPapx + 1;
 				break;
 			}
-			iMaxIndex += 2;
+			tMaxIndex += 2;
 
 		}
 		NO_DBG_DEC(iCounter);
 	} while (iCounter > 0);
 
+	/* Fill records that are still empty */
 	for (iIndex = 0; iIndex < (int)tStdCount; iIndex++) {
 		if (!abFilled[iIndex]) {
 			NO_DBG_DEC(iIndex);
@@ -391,6 +401,7 @@ vGet2Stylesheet(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 		}
 	}
 
+	/* Clean up before you leave */
 	abFilled = xfree(abFilled);
 	aucBuffer = xfree(aucBuffer);
 } /* end of vGet2Stylesheet */
@@ -561,6 +572,7 @@ vGet6Stylesheet(FILE *pFile, ULONG ulStartBlock,
 		NO_DBG_DEC(iCounter);
 	} while (iCounter > 0);
 
+	/* Fill records that are still empty */
 	for (iIndex = 0; iIndex < (int)tStdCount; iIndex++) {
 		if (!abFilled[iIndex]) {
 			NO_DBG_DEC(iIndex);
@@ -570,6 +582,7 @@ vGet6Stylesheet(FILE *pFile, ULONG ulStartBlock,
 		}
 	}
 
+	/* Clean up before you leave */
 	abFilled = xfree(abFilled);
 	aucBuffer = xfree(aucBuffer);
 } /* end of vGet6Stylesheet */
@@ -588,11 +601,10 @@ vGet8Stylesheet(FILE *pFile, const pps_info_type *pPPS,
 	const ULONG	*aulBlockDepot;
 	UCHAR	*aucBuffer;
 	ULONG	ulBeginStshInfo;
-	ULONG	ulTableSize, ulTableStartBlock;
 	size_t	tStshInfoLen, tBlockDepotLen, tOffset, tStdLen, tStdBaseInFile;
 	size_t	tBlockSize, tPos, tNameLen, tUpxLen;
 	int	iIndex, iBaseStyleIndex, iCounter;
-	USHORT	usDocStatus, usTmp, usUpxCount, usStyleType, usBaseStyle;
+	USHORT	usTmp, usUpxCount, usStyleType, usBaseStyle;
 	USHORT	usFtcStandardChpStsh;
 
 	fail(pFile == NULL || pPPS == NULL || aucHeader == NULL);
@@ -603,22 +615,14 @@ vGet8Stylesheet(FILE *pFile, const pps_info_type *pPPS,
 	tStshInfoLen = (size_t)ulGetLong(0xa6, aucHeader); /* lcbStshf */
 	NO_DBG_DEC(tStshInfoLen);
 
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		ulTableStartBlock = pPPS->t1Table.ulSB;
-		ulTableSize = pPPS->t1Table.ulSize;
-	} else {
-		ulTableStartBlock = pPPS->t0Table.ulSB;
-		ulTableSize = pPPS->t0Table.ulSize;
-	}
-	NO_DBG_DEC(ulTableStartBlock);
-	if (ulTableStartBlock == 0) {
+	NO_DBG_DEC(pPPS->tTable.ulSB);
+	NO_DBG_HEX(pPPS->tTable.ulSize);
+	if (pPPS->tTable.ulSize == 0) {
 		DBG_MSG("No stylesheet information");
 		return;
 	}
-	NO_DBG_HEX(ulTableSize);
-	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+
+	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
 		/* Use the Small Block Depot */
 		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
@@ -630,7 +634,7 @@ vGet8Stylesheet(FILE *pFile, const pps_info_type *pPPS,
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tStshInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucBuffer, ulBeginStshInfo, tStshInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
@@ -771,6 +775,7 @@ vGet8Stylesheet(FILE *pFile, const pps_info_type *pPPS,
 		NO_DBG_DEC(iCounter);
 	} while (iCounter > 0);
 
+	/* Fill records that are still empty */
 	for (iIndex = 0; iIndex < (int)tStdCount; iIndex++) {
 		if (!abFilled[iIndex]) {
 			NO_DBG_DEC(iIndex);
@@ -780,6 +785,7 @@ vGet8Stylesheet(FILE *pFile, const pps_info_type *pPPS,
 		}
 	}
 
+	/* Clean up before you leave */
 	abFilled = xfree(abFilled);
 	aucBuffer = xfree(aucBuffer);
 } /* end of vGet8Stylesheet */

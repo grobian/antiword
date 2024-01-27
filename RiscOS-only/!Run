@@ -1,5 +1,5 @@
 | !Run file for !Antiword
-| (C) Adri van Os 1998-2003
+| (C) Adri van Os 1998-2004
 |
 if "<System$Path>" = "" then Error 0 System resources cannot be found
 if "<Font$Path>" = "" then Error 0 There are no fonts available
@@ -23,5 +23,5 @@ RMEnsure SharedCLibrary 3.75 Error You need Clib 3.75 or later
 |
 if "<File$Type_AE6>" = "" then Set File$Type_AE6 MSWord
 |
-WimpSlot -min 260K -max 260K
+WimpSlot -min 264K -max 264K
 Run <Antiword$Dir>.!RunImage %*0

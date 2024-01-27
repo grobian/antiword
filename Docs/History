@@ -9,7 +9,7 @@ files to everybody, because they believe that everybody runs Windows(R) and
 therefore runs Word".
 
 
-Version 0.35 (14 Nov 2003)
+Version 0.36 (16 Oct 2004)
 --------------------------
 Beta release, for evaluation by the public.
 
@@ -27,7 +27,7 @@ Known Limitations
 5) Antiword places box text after normal text and not in a box.
 6) Antiword doesn't try to emulate any of Word's DTP abilities.
 7) PostScript ouput will not work in combination with UTF-8. It only works in
-   combination with character sets ISO 8859-1 and ISO 8859-2.
+   combination with character sets ISO-8859-1, ISO-8859-2 and ISO-8859-5.
 8) Antiword's error messages are not very helpful.
 
 

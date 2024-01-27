@@ -1,6 +1,6 @@
 /*
  * prop8.c
- * Copyright (C) 1998-2003 A.J. van Os; Released under GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Read the property information from a MS Word 8, 9 or 10 file
@@ -129,11 +129,9 @@ vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
 	const ULONG	*aulBlockDepot;
 	UCHAR	*aucBuffer, *aucFpage;
 	ULONG	ulBeginSectInfo;
-	ULONG	ulTableSize, ulTableStartBlock;
 	size_t	tSectInfoLen, tBlockDepotLen;
 	size_t	tBlockSize, tOffset, tLen, tBytes;
 	int	iIndex;
-	USHORT	usDocStatus;
 	UCHAR	aucTmp[2];
 
 	fail(pFile == NULL || pPPS == NULL || aucHeader == NULL);
@@ -148,22 +146,14 @@ vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
 		return;
 	}
 
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		ulTableStartBlock = pPPS->t1Table.ulSB;
-		ulTableSize = pPPS->t1Table.ulSize;
-	} else {
-		ulTableStartBlock = pPPS->t0Table.ulSB;
-		ulTableSize = pPPS->t0Table.ulSize;
-	}
-	DBG_DEC(ulTableStartBlock);
-	if (ulTableStartBlock == 0) {
+	NO_DBG_DEC(pPPS->tTable.ulSB);
+	NO_DBG_HEX(pPPS->tTable.ulSize);
+	if (pPPS->tTable.ulSize == 0) {
 		DBG_MSG("No section information");
 		return;
 	}
-	DBG_HEX(ulTableSize);
-	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+
+	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
 		/* Use the Small Block Depot */
 		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
@@ -175,7 +165,7 @@ vGet8SepInfo(FILE *pFile, const pps_info_type *pPPS,
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tSectInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucBuffer, ulBeginSectInfo, tSectInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
@@ -335,7 +325,6 @@ eGet8RowInfo(int iFodo,
 				werr(1, "The number of columns is corrupt");
 			}
 			pRow->ucNumberOfColumns = (UCHAR)iCol;
-			pRow->iColumnWidthSum = 0;
 			iPosPrev = (int)(short)usGetWord(
 					iFodo + iFodoOff + 5,
 					aucGrpprl);
@@ -345,8 +334,6 @@ eGet8RowInfo(int iFodo,
 					aucGrpprl);
 				pRow->asColumnWidth[iIndex] =
 						(short)(iPosCurr - iPosPrev);
-				pRow->iColumnWidthSum +=
-					pRow->asColumnWidth[iIndex];
 				iPosPrev = iPosCurr;
 			}
 			bFoundd608 = TRUE;
@@ -432,26 +419,27 @@ vGet8StyleInfo(int iFodo,
 			DBG_DEC(sTmp);
 			DBG_DEC(pStyle->sLeftIndent);
 			break;
-		case 0x6c0d:	/* ChgTabsPapx */
+		case 0xc60d:	/* ChgTabsPapx */
+		case 0xc615:	/* ChgTabs */
 			iTmp = (int)ucGetByte(iFodo + iFodoOff + 2, aucGrpprl);
 			if (iTmp < 2) {
 				iInfoLen = 1;
 				break;
 			}
-			DBG_DEC(iTmp);
+			NO_DBG_DEC(iTmp);
 			iDel = (int)ucGetByte(iFodo + iFodoOff + 3, aucGrpprl);
 			if (iTmp < 2 + 2 * iDel) {
 				iInfoLen = 1;
 				break;
 			}
-			DBG_DEC(iDel);
+			NO_DBG_DEC(iDel);
 			iAdd = (int)ucGetByte(
 				iFodo + iFodoOff + 4 + 2 * iDel, aucGrpprl);
 			if (iTmp < 2 + 2 * iDel + 2 * iAdd) {
 				iInfoLen = 1;
 				break;
 			}
-			DBG_DEC(iAdd);
+			NO_DBG_DEC(iAdd);
 			break;
 		case 0x840e:	/* dxaRight */
 			pStyle->sRightIndent = (short)usGetWord(
@@ -578,36 +566,27 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 	list_block_type	tList;
 	const ULONG	*aulBlockDepot;
 	UCHAR	*aucLfoInfo, *aucLstfInfo, *aucPapx, *aucXString;
-	ULONG	ulTableStartBlock, ulTableSize;
 	ULONG	ulBeginLfoInfo, ulBeginLstfInfo, ulBeginLvlfInfo;
 	ULONG	ulListID, ulStart;
 	size_t	tBlockDepotLen, tBlockSize;
 	size_t	tLfoInfoLen, tLstfInfoLen, tPapxLen, tXstLen, tOff;
 	size_t	tLstfRecords, tStart, tIndex;
 	int	iNums;
-	USHORT	usDocStatus, usIstd;
+	USHORT	usIstd;
 	UCHAR	ucTmp, ucListLevel, ucMaxLevel, ucChpxLen;
 	UCHAR	aucLvlfInfo[28], aucXst[2];
 
 	fail(pFile == NULL || pPPS == NULL || aucHeader == NULL);
 	fail(aulBBD == NULL || aulSBD == NULL);
 
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		ulTableStartBlock = pPPS->t1Table.ulSB;
-		ulTableSize = pPPS->t1Table.ulSize;
-	} else {
-		ulTableStartBlock = pPPS->t0Table.ulSB;
-		ulTableSize = pPPS->t0Table.ulSize;
-	}
-	DBG_DEC(ulTableStartBlock);
-	if (ulTableStartBlock == 0) {
+	NO_DBG_DEC(pPPS->tTable.ulSB);
+	NO_DBG_HEX(pPPS->tTable.ulSize);
+	if (pPPS->tTable.ulSize == 0) {
 		DBG_MSG("No list information");
 		return;
 	}
-	DBG_HEX(ulTableSize);
-	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+
+	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
 		/* Use the Small Block Depot */
 		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
@@ -630,7 +609,7 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 	}
 
 	aucLfoInfo = xmalloc(tLfoInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucLfoInfo, ulBeginLfoInfo, tLfoInfoLen)) {
 		aucLfoInfo = xfree(aucLfoInfo);
@@ -651,7 +630,7 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 	}
 
 	aucLstfInfo = xmalloc(tLstfInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucLstfInfo, ulBeginLstfInfo, tLstfInfoLen)) {
 		aucLstfInfo = xfree(aucLstfInfo);
@@ -690,7 +669,7 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 			NO_DBG_HEX(ulStart);
 			(void)memset(&tList, 0, sizeof(tList));
 			/* Read the lvlf (List leVeL on File) */
-			if (!bReadBuffer(pFile, ulTableStartBlock,
+			if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 					aulBlockDepot, tBlockDepotLen,
 					tBlockSize, aucLvlfInfo,
 					ulStart, sizeof(aucLvlfInfo))) {
@@ -713,7 +692,7 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 			if (tPapxLen != 0) {
 				aucPapx = xmalloc(tPapxLen);
 				/* Read the Papx */
-				if (!bReadBuffer(pFile, ulTableStartBlock,
+				if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 						aulBlockDepot, tBlockDepotLen,
 						tBlockSize, aucPapx,
 						ulStart, tPapxLen)) {
@@ -730,7 +709,7 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 			ucChpxLen = ucGetByte(24, aucLvlfInfo);
 			ulStart += (ULONG)ucChpxLen;
 			/* Read the length of the XString */
-			if (!bReadBuffer(pFile, ulTableStartBlock,
+			if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 					aulBlockDepot, tBlockDepotLen,
 					tBlockSize, aucXst,
 					ulStart, sizeof(aucXst))) {
@@ -751,7 +730,7 @@ vGet8LstInfo(FILE *pFile, const pps_info_type *pPPS,
 			tXstLen *= 2;	/* Length in chars to length in bytes */
 			aucXString = xmalloc(tXstLen);
 			/* Read the XString */
-			if (!bReadBuffer(pFile, ulTableStartBlock,
+			if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 					aulBlockDepot, tBlockDepotLen,
 					tBlockSize, aucXString,
 					ulStart, tXstLen)) {
@@ -805,12 +784,11 @@ vGet8PapInfo(FILE *pFile, const pps_info_type *pPPS,
 	UCHAR	*aucBuffer;
 	ULONG	ulCharPos, ulCharPosFirst, ulCharPosLast;
 	ULONG	ulBeginParfInfo;
-	ULONG	ulTableSize, ulTableStartBlock;
 	size_t	tParfInfoLen, tBlockDepotLen;
 	size_t	tBlockSize, tOffset, tLen;
 	int	iIndex, iIndex2, iRun, iFodo, iLen;
 	row_info_enum	eRowInfo;
-	USHORT	usDocStatus, usIstd;
+	USHORT	usIstd;
 	UCHAR	aucFpage[BIG_BLOCK_SIZE];
 
 	fail(pFile == NULL || pPPS == NULL || aucHeader == NULL);
@@ -825,22 +803,14 @@ vGet8PapInfo(FILE *pFile, const pps_info_type *pPPS,
 		return;
 	}
 
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		ulTableStartBlock = pPPS->t1Table.ulSB;
-		ulTableSize = pPPS->t1Table.ulSize;
-	} else {
-		ulTableStartBlock = pPPS->t0Table.ulSB;
-		ulTableSize = pPPS->t0Table.ulSize;
-	}
-	DBG_DEC(ulTableStartBlock);
-	if (ulTableStartBlock == 0) {
+	NO_DBG_DEC(pPPS->tTable.ulSB);
+	NO_DBG_HEX(pPPS->tTable.ulSize);
+	if (pPPS->tTable.ulSize == 0) {
 		DBG_MSG("No paragraph information");
 		return;
 	}
-	DBG_HEX(ulTableSize);
-	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+
+	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
 		/* Use the Small Block Depot */
 		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
@@ -853,7 +823,7 @@ vGet8PapInfo(FILE *pFile, const pps_info_type *pPPS,
 	}
 
 	aucBuffer = xmalloc(tParfInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucBuffer, ulBeginParfInfo, tParfInfoLen)) {
 		aucBuffer = xfree(aucBuffer);
@@ -1277,11 +1247,10 @@ vGet8ChrInfo(FILE *pFile, const pps_info_type *pPPS,
 	const ULONG	*aulBlockDepot;
 	UCHAR	*aucBuffer;
 	ULONG	ulFileOffset, ulCharPos, ulBeginCharInfo;
-	ULONG	ulTableSize, ulTableStartBlock;
 	size_t	tCharInfoLen, tBlockDepotLen;
 	size_t	tOffset, tBlockSize, tLen;
 	int	iIndex, iIndex2, iRun, iFodo, iLen;
-	USHORT	usDocStatus, usIstd;
+	USHORT	usIstd;
 	UCHAR	aucFpage[BIG_BLOCK_SIZE];
 
 	fail(pFile == NULL || pPPS == NULL || aucHeader == NULL);
@@ -1296,22 +1265,14 @@ vGet8ChrInfo(FILE *pFile, const pps_info_type *pPPS,
 		return;
 	}
 
-	/* Use 0Table or 1Table? */
-	usDocStatus = usGetWord(0x0a, aucHeader);
-	if (usDocStatus & BIT(9)) {
-		ulTableStartBlock = pPPS->t1Table.ulSB;
-		ulTableSize = pPPS->t1Table.ulSize;
-	} else {
-		ulTableStartBlock = pPPS->t0Table.ulSB;
-		ulTableSize = pPPS->t0Table.ulSize;
-	}
-	DBG_DEC(ulTableStartBlock);
-	if (ulTableStartBlock == 0) {
+	NO_DBG_DEC(pPPS->tTable.ulSB);
+	NO_DBG_HEX(pPPS->tTable.ulSize);
+	if (pPPS->tTable.ulSize == 0) {
 		DBG_MSG("No character information");
 		return;
 	}
-	DBG_HEX(ulTableSize);
-	if (ulTableSize < MIN_SIZE_FOR_BBD_USE) {
+
+	if (pPPS->tTable.ulSize < MIN_SIZE_FOR_BBD_USE) {
 		/* Use the Small Block Depot */
 		aulBlockDepot = aulSBD;
 		tBlockDepotLen = tSBDLen;
@@ -1323,7 +1284,7 @@ vGet8ChrInfo(FILE *pFile, const pps_info_type *pPPS,
 		tBlockSize = BIG_BLOCK_SIZE;
 	}
 	aucBuffer = xmalloc(tCharInfoLen);
-	if (!bReadBuffer(pFile, ulTableStartBlock,
+	if (!bReadBuffer(pFile, pPPS->tTable.ulSB,
 			aulBlockDepot, tBlockDepotLen, tBlockSize,
 			aucBuffer, ulBeginCharInfo, tCharInfoLen)) {
 		aucBuffer = xfree(aucBuffer);

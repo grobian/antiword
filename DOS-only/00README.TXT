@@ -53,6 +53,11 @@ The Antiword executable (antiword.exe) can be placed in any directory. If you
 choose a directory from your %PATH%, you will not have to use a full pathname
 every time.
 
+(7)
+Under DOS the default mapping file does not depend on the locale. Locale is
+a POSIX feature. Under DOS the default mapping file depends on the active
+codepage.
+
 
 Examples of use
 ===============
@@ -63,27 +68,32 @@ To get text output
 (1) display a Word document in Latin1, one page at a time
 antiword -m cp850.txt filename.doc | more
 
-(2) save the text version of the Word document in Latin2, in a file
+(2) save the text version of a Word document in Latin2 in a file
 antiword -m cp852.txt filename.doc > filename.txt
 
 (3) display a Word document in Hebrew, one page at a time
 antiword -m cp862.txt filename.doc | more
 
-(4) save the text version of the Word document in Russian Cyrillic, in a file
+(4) save the text version of a Word document in Russian Cyrillic in a file
 antiword -m cp866.txt filename.doc > filename.txt
 
 To get PostScript output
 ========================
 
-(1) save the PostScript version of the Word document in Latin1, in a file
+(1) save the PostScript version of a Word document in Latin1 in a file,
     generate PostScript for printing on European A4 size paper
 antiword -p a4 -m 8859-1.txt filename.doc > filename.ps
 
-(2) save the PostScipt version of the Word document in Latin2, in a file
+(2) save the PostScipt version of a Word document in Latin2 in a file,
     generate PostScript for printing on American letter size paper
 antiword -p letter -m 8859-2.txt filename.doc > filename.ps
 
-NOTE: PostScript ouput is only supported for character sets Latin1 and Latin2.
+(3) save the PostScript version of a Word document in Cyrillic in a file,
+    generate PostScript for printing on European A4 size paper
+antiword -p a4 -m 8859-5.txt filename.doc > filename.ps
+
+NOTE: PostScript ouput is only supported for character sets Latin1, Latin2 and
+      Cyrillic.
 
 NOTE: You need different mapping files for text and PostScript.
 

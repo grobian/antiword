@@ -1,16 +1,18 @@
 #=======================================================================
-#   FTP file name:  ROMAN.TXT
+#   File name:  ROMAN.TXT
 #
-#   Contents:       Map (external version) from Mac OS Roman
-#                   character set to Unicode 2.1
+#   Contents:   Map (external version) from Mac OS Roman
+#               character set to Unicode 2.1 through Unicode 3.2
 #
-#   Copyright:      (c) 1994-1999 by Apple Computer, Inc., all rights
-#                   reserved.
+#   Copyright:  (c) 1994-2002 by Apple Computer, Inc., all rights
+#               reserved.
 #
-#   Contact:        charsets@apple.com
+#   Contact:    charsets@apple.com
 #
 #   Changes:
 #
+#      b4,c1 2002-Dec-19    Update URLs, notes. Matches internal
+#                           utom<b5>.
 #       b03  1999-Sep-22    Update contact e-mail address. Matches
 #                           internal utom<b4>, ufrm<b3>, and Text
 #                           Encoding Converter version 1.5.
@@ -48,8 +50,7 @@
 #   These mapping tables and character lists are subject to change.
 #   The latest tables should be available from the following:
 #
-#   <ftp://ftp.unicode.org/Public/MAPPINGS/VENDORS/APPLE/>
-#   <ftp://dev.apple.com/devworld/Technical_Documentation/Misc._Standards/>
+#   <http://www.unicode.org/Public/MAPPINGS/VENDORS/APPLE/>
 #
 #   For general information about Mac OS encodings and these mapping
 #   tables, see the file "README.TXT".
@@ -92,9 +93,6 @@
 #   Apple fonts are updated for Mac OS 8.5 to reflect this. There is
 #   a "currency sign" variant of the Mac OS Roman encoding that still
 #   maps 0xDB to U+00A4; this can be used for older fonts.
-#   Note: U+20AC is new with Unicode 2.1; for earlier Unicode
-#   versions, Mac OS Roman 0xDB may be mapped to private-use character
-#   U+F8A0.
 #
 #   Before Mac OS 8.5, the ROM bitmap versions of the fonts Chicago,
 #   New York, Geneva, and Monaco did not implement the full Mac OS

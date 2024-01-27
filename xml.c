@@ -1073,8 +1073,9 @@ vStartOfListXML(diagram_type *pDiag, UCHAR ucNFC, BOOL bIsEndOfTable)
 	switch (ucNFC) {
 	case LIST_ARABIC_NUM:
 	case LIST_ORDINAL_NUM:
-	case LIST_ARABIC_NUM_2:
-	case LIST_ARABIC_NUM_3:
+	case LIST_NUMBER_TXT:
+	case LIST_ORDINAL_TXT:
+	case LIST_OUTLINE_NUM:
 		ucTag = TAG_ORDEREDLIST;
 		szAttr = "numeration='arabic'";
 		break;
@@ -1102,7 +1103,7 @@ vStartOfListXML(diagram_type *pDiag, UCHAR ucNFC, BOOL bIsEndOfTable)
 	default:
 		ucTag = TAG_ORDEREDLIST;
 		szAttr = "numeration='arabic'";
-		DBG_DEC(ucNFC);
+		DBG_HEX(ucNFC);
 		DBG_FIXME();
 		break;
 	}

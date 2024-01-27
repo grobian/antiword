@@ -17,16 +17,26 @@ DESCRIPTION
        later are supported.
 
 OPTIONS
+       -a papersize
+              Output in Adobe PDF form. Printable on paper of the
+              specified  size:  10x14, a3, a4, a5, b4, b5, execu-
+              tive, folio, legal, letter, note, quarto, statement
+              or tabloid.
+
+       -f     Output in formatted text form. That means that bold
+              text is printed like *bold*, italics like /italics/
+              and undelined text as _underlined_.
+
        -h     Give a help message.
 
        -i image level
-              The image  level  determines  how  images  will  be
+              The  image  level  determines  how  images  will be
               shown.
 
-              0: Use  non-standard  extensions  from Ghostscript.
-                 This output may  not  print  on  any  PostScript
-                 printer,  but  is useful in case no hard copy is
-                 needed. It is also useful  when  Ghostscript  is
+              0: Use non-standard  extensions  from  Ghostscript.
+                 This  output  may  not  print  on any PostScript
+                 printer, but is useful in case no hard  copy  is
+                 needed.  It  is  also useful when Ghostscript is
                  used as a filter to print a PostScript file to a
                  non-PostScript printer.
 
@@ -34,15 +44,14 @@ OPTIONS
 
               2: PostScript level 2 compatible. (default)
 
-              3: PostScript level  3  compatible.  (EXPERIMENTAL,
-                 Portable  Network  Graphics (PNG) images are not
+              3: PostScript  level  3  compatible. (EXPERIMENTAL,
+                 Portable Network Graphics (PNG) images  are  not
                  printed correctly)
 
        -m mapping file
               This file is used to map Unicode characters to your
-              local  character  set.  The default is UTF-8.txt in
-              locales that support UTF-8 and 8859-1.txt in  other
-              locales.
+              local character  set.   The  default  mapping  file
+              depends on the locale.
 
        -p papersize
               Output  in  PostScript  form. Printable on paper of
@@ -96,14 +105,19 @@ ENVIRONMENT
        ``COLUMNS'' to set the width of the output  (unless  over-
        ridden by the -w option).
 
+       Antiword   uses   the  environment  variables  ``LC_ALL'',
+       ``LC_CTYPE'' and ``LANG'' (in that order) to get the  cur-
+       rent  locale  and  uses  this  information  to  select the
+       default mapping file.
+
 BUGS
-       Antiword  is  far  from  complete. Many features are still
+       Antiword is far from complete.  Many  features  are  still
        missing. Many images are not shown yet. Some of the images
-       that  are shown, are shown in the wrong place.  PostScript
+       that are shown, are shown in the wrong place.   PostScript
        output is only available in ISO 8859-1 and ISO 8859-2.
 
 WEB SITES
-       The most recent released version  of  Antiword  is  always
+       The  most  recent  released  version of Antiword is always
        available from:
        http://www.winfield.demon.nl/index.html
        or try
@@ -118,29 +132,30 @@ AUTHOR
        contributed to this manual page.
 
 LICENSE
-       Antiword  is free software; you can redistribute it and/or
-       modify it under  the  terms  of  the  GNU  General  Public
-       License  as  published  by  the  Free Software Foundation;
-       either version 2 of the License, or (at your  option)  any
+       Antiword is free software; you can redistribute it  and/or
+       modify  it  under  the  terms  of  the  GNU General Public
+       License as published  by  the  Free  Software  Foundation;
+       either  version  2 of the License, or (at your option) any
        later version.
 
-       This  program  is  distributed in the hope that it will be
-       useful but WITHOUT ANY WARRANTY; without even the  implied
-       warranty  of  MERCHANTABILITY  or FITNESS FOR A PARTICULAR
-       PURPOSE. See the  GNU  General  Public  License  for  more
+       This program is distributed in the hope that  it  will  be
+       useful  but WITHOUT ANY WARRANTY; without even the implied
+       warranty of MERCHANTABILITY or FITNESS  FOR  A  PARTICULAR
+       PURPOSE.  See  the  GNU  General  Public  License for more
        details.
 
-       You  should have received a copy of the GNU General Public
+       You should have received a copy of the GNU General  Public
        License along with this program; if not, write to the Free
-       Software  Foundation,  Inc.,  59  Temple Place, Suite 330,
+       Software Foundation, Inc., 59  Temple  Place,  Suite  330,
        Boston, MA 02111-1307 USA
 
 ACKNOWLEDGEMENTS
        Linux is a registered trademark of Linus Torvalds.
-       PostScript is a trademark of Adobe Systems Incorporated.
+       Adobe,  PDF and PostScript are trademarks of Adobe Systems
+       Incorporated.
        Microsoft is a  registered  trademark  and  Windows  is  a
        trademark of Microsoft Corporation.
 
 
 
-Antiword 0.35              Sep 13, 2003               ANTIWORD(1)
+Antiword 0.36              Oct 13, 2004               ANTIWORD(1)

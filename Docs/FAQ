@@ -68,6 +68,7 @@ A9: The correct mapping file depends on the character set you need for output
     For Russian use 8859-5.txt or koi8-r.txt. (OS/2: cp1251.txt)
      (DOS: cp866.txt)
     For Ukrainian use koi8-u.txt.
+    For Arabic use 8859-6.txt. (DOS: cp864.txt)
     For Hebrew use 8859-8.txt. (DOS: cp862.txt)
     If your system supports it, you might also try UTF-8.txt.
 
@@ -95,3 +96,17 @@ A12: Remember that Word is basically 'text plus appearance' and XML is
      person the Word document can end up without a structure, or worse, with a
      terrible structure.
      Antiword can't create a structure when there is none.
+
+Q13: Why is the Postscript output in Cyrillic in ISO-8869-5? Nobody uses that
+     character set.
+A13: For Cyrillic you a have:
+     (a) koi8 does not cover all languages that use Cyrillic,
+     (b) cp866, cp1251 and Mac-Cyrillic are proprietary,
+     (c) Unicode and UTF-8 are not supported by PostScript yet and
+     (d) ISO-8859-5, the character set that nobody uses.
+
+Q14: I have used "antiword -p a4 -m 8869-5.txt file.doc > file.ps", but I get
+     no Cyrillic characters.
+A14: Programs like Ghostscript and Ghostview need Cyrillic enabled fonts in
+     order to show Cyrillic characters. A PostScript printer needs to be
+     Cyrillic enabled in order to show Cyrillic characters.

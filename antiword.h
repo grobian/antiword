@@ -1,6 +1,6 @@
 /*
  * antiword.h
- * Copyright (C) 1998-2003 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Generic include file for project 'Antiword'
@@ -138,11 +138,11 @@
 /* Macros */
 #define STREQ(x,y)	(*(x) == *(y) && strcmp(x,y) == 0)
 #define STRNEQ(x,y,n)	(*(x) == *(y) && strncmp(x,y,n) == 0)
-#if defined(__dos)
+#if defined(__dos) || defined(__EMX__)
 #define STRCEQ(x,y)	(stricmp(x,y) == 0)
 #else
 #define STRCEQ(x,y)	(strcasecmp(x,y) == 0)
-#endif /* __dos */
+#endif /* __dos or __EMX__ */
 #define elementsof(a)	(sizeof(a) / sizeof(a[0]))
 #define odd(x)		(((x)&0x01)!=0)
 #define ROUND4(x)	(((x)+3)&~0x03)
@@ -212,15 +212,34 @@
 #define GLOBAL_ANTIWORD_DIR	"C:\\antiword"
 #define ANTIWORD_DIR		"antiword"
 #define FONTNAMES_FILE		"fontnames"
+#elif defined(__Plan9__)
+#define GLOBAL_ANTIWORD_DIR	"/sys/lib/antiword"
+#define ANTIWORD_DIR		"lib/antiword"
+#define FONTNAMES_FILE		"fontnames"
 #else	/* All others */
 #define GLOBAL_ANTIWORD_DIR	"/usr/share/antiword"
 #define ANTIWORD_DIR		".antiword"
 #define FONTNAMES_FILE		"fontnames"
 #endif /* __dos */
-/* The name of the default mapping file */
-#define MAPPING_FILE_DEFAULT_1	"8859-1.txt"
-#define MAPPING_FILE_DEFAULT_2	"8859-2.txt"
-#define MAPPING_FILE_DEFAULT_8	"UTF-8.txt"
+/* The names of grouped mapping files */
+	/* ASCII */
+#define MAPPING_FILE_CP437	"cp437.txt"
+	/* Latin1 */
+#define MAPPING_FILE_8859_1	"8859-1.txt"
+	/* Latin2 */
+#define MAPPING_FILE_8859_2	"8859-2.txt"
+#define MAPPING_FILE_CP852	"cp852.txt"
+#define MAPPING_FILE_CP1250	"cp1250.txt"
+	/* Cyrillic */
+#define MAPPING_FILE_8859_5	"8859-5.txt"
+#define MAPPING_FILE_KOI8_R	"koi8-r.txt"
+#define MAPPING_FILE_KOI8_U	"koi8-u.txt"
+#define MAPPING_FILE_CP866	"cp866.txt"
+#define MAPPING_FILE_CP1251	"cp1251.txt"
+	/* Latin9 */
+#define MAPPING_FILE_8859_15	"8859-15.txt"
+	/* UTF-8 */
+#define MAPPING_FILE_UTF_8	"UTF-8.txt"
 #endif /* __riscos */
 
 /* Prototypes */
@@ -243,8 +262,9 @@ extern ULONG	ulGetSeqNumber(ULONG);
 extern ULONG	ulGetDocumentLength(void);
 #endif /* __riscos */
 /* chartrans.c */
-extern UCHAR	ucGetNbspValue(void);
-extern BOOL	bReadCharacterMappingTable(const char *);
+extern UCHAR	ucGetBulletCharacter(conversion_type, encoding_type);
+extern UCHAR	ucGetNbspCharacter(void);
+extern BOOL	bReadCharacterMappingTable(FILE *);
 extern ULONG	ulTranslateCharacters(USHORT, ULONG, int, conversion_type,
 			encoding_type, BOOL);
 extern ULONG	ulToUpper(ULONG);
@@ -267,6 +287,10 @@ extern ULONG	ulDepotOffset(ULONG, size_t);
 /* dib2eps & dib2sprt.c */
 extern BOOL	bTranslateDIB(diagram_type *,
 			FILE *, ULONG, const imagedata_type *);
+#if defined(__dos)
+/* dos.c */
+extern int	iGetCodepage(void);
+#endif /* __dos */
 /* draw.c & output.c */
 extern BOOL	bAddDummyImage(diagram_type *, const imagedata_type *);
 extern diagram_type *pCreateDiagram(const char *, const char *);
@@ -312,6 +336,10 @@ extern BOOL	bGet6DocumentText(FILE *, BOOL, ULONG,
 extern BOOL	bGet8DocumentText(FILE *, const pps_info_type *,
 				const ULONG *, size_t, const ULONG *, size_t,
 				const UCHAR *);
+/* fmt_text.c */
+extern void	vPrologueFMT(diagram_type *, const options_type *);
+extern void	vSubstringFMT(diagram_type *, const char *, size_t, long,
+				USHORT);
 /* fontlist.c */
 extern void	vDestroyFontInfoList(void);
 extern void	vCorrectFontValues(font_block_type *);
@@ -333,6 +361,8 @@ extern void	vDestroyFontTable(void);
 extern const font_table_type	*pGetNextFontTableRecord(
 						const font_table_type *);
 extern size_t	tGetFontTableLength(void);
+extern void	vCorrectFontTable(conversion_type, encoding_type);
+extern long	lComputeSpaceWidth(draw_fontref, USHORT);
 /* fonts_r.c & fonts_u.c */
 extern FILE	*pOpenFontTableFile(void);
 extern void	vCloseFont(void);
@@ -392,6 +422,8 @@ extern long	lComputeLeading(USHORT);
 extern size_t	tUcs2Utf8(ULONG, char *, size_t);
 extern void	vGetBulletValue(conversion_type, encoding_type, char *, size_t);
 extern BOOL	bAllZero(const UCHAR *, size_t);
+extern BOOL	bGetNormalizedCodeset(char *, size_t, BOOL *);
+extern const char	*szGetDefaultMappingFile(void);
 /* notes.c */
 extern void	vDestroyNotesInfoLists(void);
 extern void	vGetNotesInfo(FILE *, const pps_info_type *,
@@ -415,8 +447,24 @@ extern void	vJustify2Window(diagram_type *, output_type *,
 extern void	vResetStyles(void);
 extern size_t	tStyle2Window(char *, const style_block_type *,
 			const section_block_type *);
-extern void	vTableRow2Window(diagram_type *,
-			output_type *, const row_block_type *);
+extern void	vTableRow2Window(diagram_type *, output_type *,
+			const row_block_type *, conversion_type, int);
+/* pdf.c */
+extern void	vCreateInfoDictionary(diagram_type *, int);
+extern void	vProloguePDF(diagram_type *,
+			const char *, const options_type *);
+extern void	vEpiloguePDF(diagram_type *);
+extern void	vImageProloguePDF(diagram_type *, const imagedata_type *);
+extern void	vImageEpiloguePDF(diagram_type *);
+extern BOOL	bAddDummyImagePDF(diagram_type *, const imagedata_type *);
+extern void	vAddFontsPDF(diagram_type *);
+extern void	vMove2NextLinePDF(diagram_type *, USHORT);
+extern void	vSubstringPDF(diagram_type *,
+				char *, size_t, long, UCHAR, USHORT,
+				draw_fontref, USHORT, USHORT);
+extern void	vStartOfParagraphPDF(diagram_type *, long);
+extern void	vEndOfParagraphPDF(diagram_type *, draw_fontref, USHORT, long);
+extern void	vEndOfPagePDF(diagram_type *);
 /* pictlist.c */
 extern void	vDestroyPictInfoList(void);
 extern void	vAdd2PictInfoList(const picture_block_type *);
@@ -559,6 +607,8 @@ extern const char	*szGetTitle(void);
 extern const char	*szGetSubject(void);
 extern const char	*szGetAuthor(void);
 extern const char	*szGetLastSaveDtm(void);
+extern const char	*szGetModDate(void);
+extern const char	*szGetCreationDate(void);
 extern const char	*szGetCompany(void);
 extern const char	*szGetLanguage(void);
 /* tabstop.c */
@@ -630,13 +680,5 @@ extern void	vStartOfListItemXML(diagram_type *, BOOL);
 extern void	vEndOfTableXML(diagram_type *);
 extern void	vAddTableRowXML(diagram_type *, char **, int,
 			const short *, UCHAR);
-
-
-/* For use with Gray Watson dmalloc library */
-#if defined(DMALLOC)
-#include "dmalloc.h"
-/* The xfree in Antiword is incompatible with the one in dmalloc */
-#undef xfree
-#endif /* DMALLOC */
 
 #endif /* __antiword_h */

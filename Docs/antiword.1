@@ -1,4 +1,4 @@
-.TH ANTIWORD 1 "Sep 13, 2003" "Antiword 0.35" "Linux User's Manual"
+.TH ANTIWORD 1 "Oct 13, 2004" "Antiword 0.36" "Linux User's Manual"
 .SH NAME
 antiword - show the text and images of MS Word documents
 .SH SYNOPSIS
@@ -16,6 +16,15 @@ A wordfile named - stands for a Word document read from the standard input.
 .br
 Only documents made by MS Word version 2 and version 6 or later are supported.
 .SH OPTIONS
+.TP
+.BI "\-a " papersize
+Output in Adobe PDF form. Printable on paper of the specified size: 10x14,
+a3, a4, a5, b4, b5, executive, folio, legal, letter, note, quarto, statement
+or tabloid.
+.TP
+.B \-f
+Output in formatted text form. That means that bold text is printed like
+*bold*, italics like /italics/ and undelined text as _underlined_.
 .TP
 .B \-h
 Give a help message.
@@ -43,8 +52,7 @@ images are not printed correctly)
 .TP
 .BI "\-m " "mapping file"
 This file is used to map Unicode characters to your local character set.
-The default is UTF-8.txt in locales that support UTF-8 and 8859-1.txt in other
-locales.
+The default mapping file depends on the locale.
 .TP
 .BI "\-p " papersize
 Output in PostScript form. Printable on paper of the specified size: 10x14,
@@ -98,6 +106,10 @@ Antiword uses the environment variable ``ANTIWORDHOME'' as the first directory
 to look for its files. Antiword uses the environment variable ``HOME'' to find
 the user's home directory. When in text mode it uses the variable ``COLUMNS''
 to set the width of the output (unless overridden by the -w option).
+
+Antiword uses the environment variables ``LC_ALL'', ``LC_CTYPE'' and ``LANG''
+(in that order) to get the current locale and uses this information to
+select the default mapping file.
 .SH BUGS
 Antiword is far from complete. Many features are still missing. Many images are
 not shown yet. Some of the images that are shown, are shown in the wrong place.
@@ -137,7 +149,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 .SH ACKNOWLEDGEMENTS
 Linux is a registered trademark of Linus Torvalds.
 .br
-PostScript is a trademark of Adobe Systems Incorporated.
+Adobe, PDF and PostScript are trademarks of Adobe Systems Incorporated.
 .br
 Microsoft is a registered trademark and Windows is a trademark of Microsoft
 Corporation.

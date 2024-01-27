@@ -1,6 +1,6 @@
 /*
  * word2text.c
- * Copyright (C) 1998-2003 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * MS Word to text functions
@@ -168,7 +168,7 @@ vStoreChar(ULONG ulChar, BOOL bChangeAllowed, output_type *pOutput)
 
 	fail(pOutput == NULL);
 
-	if (tOptions.eEncoding == encoding_utf8 && bChangeAllowed) {
+	if (tOptions.eEncoding == encoding_utf_8 && bChangeAllowed) {
 		DBG_HEX_C(ulChar > 0xffff, ulChar);
 		fail(ulChar > 0xffff);
 		tLen = tUcs2Utf8(ulChar, szResult, sizeof(szResult));
@@ -208,7 +208,7 @@ vStoreString(const char *szString, size_t tStringLength, output_type *pOutput)
 	fail(szString == NULL || pOutput == NULL);
 
 	for (tIndex = 0; tIndex < tStringLength; tIndex++) {
-		vStoreCharacter((UCHAR)szString[tIndex], pOutput);
+		vStoreCharacter((ULONG)(UCHAR)szString[tIndex], pOutput);
 	}
 } /* end of vStoreString */
 
@@ -306,7 +306,7 @@ vPutIndentation(diagram_type *pDiag, output_type *pOutput,
 	}
 
 #if defined(DEBUG)
-	if (tOptions.eEncoding == encoding_utf8) {
+	if (tOptions.eEncoding == encoding_utf_8) {
 		fail(strlen(szListChar) > 3);
 	} else {
 		DBG_HEX_C(iscntrl((int)szListChar[0]), szListChar[0]);
@@ -317,8 +317,7 @@ vPutIndentation(diagram_type *pDiag, output_type *pOutput,
 
 	switch (ucNFC) {
 	case LIST_ARABIC_NUM:
-	case LIST_ARABIC_NUM_2:
-	case LIST_ARABIC_NUM_3:
+	case LIST_NUMBER_TXT:
 		tNextFree = (size_t)sprintf(szLine, "%u", uiListNumber);
 		break;
 	case LIST_UPPER_ROMAN:
@@ -332,6 +331,7 @@ vPutIndentation(diagram_type *pDiag, output_type *pOutput,
 				ucNFC == LIST_UPPER_ALPHA, szLine);
 		break;
 	case LIST_ORDINAL_NUM:
+	case LIST_ORDINAL_TXT:
 		if (uiListNumber % 10 == 1 && uiListNumber != 11) {
 			tNextFree =
 				(size_t)sprintf(szLine, "%ust", uiListNumber);
@@ -346,12 +346,15 @@ vPutIndentation(diagram_type *pDiag, output_type *pOutput,
 				(size_t)sprintf(szLine, "%uth", uiListNumber);
 		}
 		break;
+	case LIST_OUTLINE_NUM:
+		tNextFree = (size_t)sprintf(szLine, "%02u", uiListNumber);
+		break;
 	case LIST_SPECIAL:
 	case LIST_BULLETS:
 		tNextFree = 0;
 		break;
 	default:
-		DBG_DEC(ucNFC);
+		DBG_HEX(ucNFC);
 		DBG_FIXME();
 		tNextFree = (size_t)sprintf(szLine, "%u", uiListNumber);
 		break;
@@ -367,7 +370,7 @@ vPutIndentation(diagram_type *pDiag, output_type *pOutput,
 	}
 	vSetLeftIndentation(pDiag, lLeftIndentation);
 	for (tIndex = 0; tIndex < tNextFree; tIndex++) {
-		vStoreChar((UCHAR)szLine[tIndex], FALSE, pOutput);
+		vStoreChar((ULONG)(UCHAR)szLine[tIndex], FALSE, pOutput);
 	}
 } /* end of vPutIndentation */
 
@@ -607,7 +610,7 @@ bWordDecryptor(FILE *pFile, long lFilesize, diagram_type *pDiag)
 	ULONG	ulChar;
 	long	lBeforeIndentation, lAfterIndentation;
 	long	lLeftIndentation, lLeftIndentation1, lRightIndentation;
-	long	lWidthCurr, lWidthMax, lDefaultTabWidth, lTmp;
+	long	lWidthCurr, lWidthMax, lDefaultTabWidth, lHalfSpaceWidth, lTmp;
 	list_id_enum 	eListID;
 	image_info_enum	eRes;
 	UINT	uiFootnoteNumber, uiEndnoteNumber, uiTmp;
@@ -1072,11 +1075,15 @@ bWordDecryptor(FILE *pFile, long lFilesize, diagram_type *pDiag)
 				break;
 			}
 			if (tOptions.iParagraphBreak == 0 &&
-			    tOptions.eConversionType == conversion_text) {
+			    (tOptions.eConversionType == conversion_text ||
+			     tOptions.eConversionType == conversion_fmt_text)) {
 				/* No logical lines, so no tab expansion */
 				vStoreCharacter(TAB, pOutput);
 				break;
 			}
+			lHalfSpaceWidth = (lComputeSpaceWidth(
+					pOutput->tFontRef,
+					pOutput->usFontSize) + 1) / 2;
 			lTmp = lTotalStringWidth(pAnchor);
 			lTmp += lDrawUnits2MilliPoints(pDiag->lXleft);
 			lTmp /= lDefaultTabWidth;
@@ -1126,7 +1133,9 @@ bWordDecryptor(FILE *pFile, long lFilesize, diagram_type *pDiag)
 			/* End of a table row */
 			if (bEndRowNorm) {
 				fail(pRowInfo == NULL);
-				vTableRow2Window(pDiag, pAnchor, pRowInfo);
+				vTableRow2Window(pDiag, pAnchor, pRowInfo,
+						tOptions.eConversionType,
+						tOptions.iParagraphBreak);
 			} else {
 				fail(!bEndRowFast);
 			}

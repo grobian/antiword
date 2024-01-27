@@ -522,13 +522,21 @@ vSet2SummaryInfo(FILE *pFile, int iWordVersion, const UCHAR *aucHeader)
 	DBG_HEX(usLid);
 	if (usLid < 999 && iWordVersion == 1) {
 		switch (usLid) {
-		case  1: usLid = 0x0409; break;	/* American English */
-		case  2: usLid = 0x0c0c; break;	/* Canadian French */
-		case 31: usLid = 0x0413; break;	/* Dutch */
-		case 33: usLid = 0x040c; break;	/* French */
-		case 34: usLid = 0x040a; break;	/* Spanish */
-		case 44: usLid = 0x0809; break;	/* British English */
-		case 49: usLid = 0x0407; break;	/* German */
+		case   1: usLid = 0x0409; break;	/* American English */
+		case   2: usLid = 0x0c0c; break;	/* Canadian French */
+		case  31: usLid = 0x0413; break;	/* Dutch */
+		case  33: usLid = 0x040c; break;	/* French */
+		case  34: usLid = 0x040a; break;	/* Spanish */
+		case  36: usLid = 0x040e; break;	/* Hungarian */
+		case  39: usLid = 0x0410; break;	/* Italian */
+		case  44: usLid = 0x0809; break;	/* British English */
+		case  45: usLid = 0x0406; break;	/* Danish */
+		case  46: usLid = 0x041f; break;	/* Swedish */
+		case  47: usLid = 0x0414; break;	/* Norwegian */
+		case  48: usLid = 0x0415; break;	/* Polish */
+		case  49: usLid = 0x0407; break;	/* German */
+		case 351: usLid = 0x0816; break;	/* Portuguese */
+		case 358: usLid = 0x040b; break;	/* Finnish */
 		default:
 			DBG_DEC(usLid);
 			DBG_FIXME();
@@ -741,6 +749,50 @@ szGetLastSaveDtm(void)
 		pTime->tm_year + 1900, pTime->tm_mon + 1, pTime->tm_mday);
 	return szTime;
 } /* end of szGetLastSaveDtm */
+
+/*
+ * szGetModDate - get the last save date field
+ */
+const char *
+szGetModDate(void)
+{
+	static char	szTime[20];
+	struct tm	*pTime;
+
+	if (tLastSaveDtm == (time_t)-1) {
+		return NULL;
+	}
+	pTime = localtime(&tLastSaveDtm);
+	if (pTime == NULL) {
+		return NULL;
+	}
+	sprintf(szTime, "D:%04d%02d%02d%02d%02d",
+		pTime->tm_year + 1900, pTime->tm_mon + 1, pTime->tm_mday,
+		pTime->tm_hour, pTime->tm_min);
+	return szTime;
+} /* end of szGetModDate */
+
+/*
+ * szGetCreationDate - get the last save date field
+ */
+const char *
+szGetCreationDate(void)
+{
+	static char	szTime[20];
+	struct tm	*pTime;
+
+	if (tCreateDtm == (time_t)-1) {
+		return NULL;
+	}
+	pTime = localtime(&tCreateDtm);
+	if (pTime == NULL) {
+		return NULL;
+	}
+	sprintf(szTime, "D:%04d%02d%02d%02d%02d",
+		pTime->tm_year + 1900, pTime->tm_mon + 1, pTime->tm_mday,
+		pTime->tm_hour, pTime->tm_min);
+	return szTime;
+} /* end of szGetCreationDate */
 
 /*
  * szGetCompany - get the company field

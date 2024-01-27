@@ -8,7 +8,7 @@
 Antiword
 ========
 
-Version 0.35 (14 Nov 2003)
+Version 0.36 (16 Oct 2004)
 --------------------------     
 
 Introduction
@@ -56,13 +56,14 @@ Character set mapping by: Dmitry Chernyak
                           <Dmitry.Chernyak@p998.f983.n5030.z2.fidonet.org>
 UTF-8 support by: Karl Koehler <koehler@or.uni-bonn.de> and
                   Markus Kuhn <Markus.Kuhn@cl.cam.ac.uk>
+PostScript Cyrillic by: Alexander Belyaev <isle@free.kursknet.ru>
 
 
 Ports
 -----
 
 Antiword was ported to BeOS by Pete Goodeve <pete@jwgibbs.cchem.berkeley.edu>
-Antiword was ported to OS/2 by Dave Yeo <dave_yeo@mindlink.bc.ca>
+Antiword was ported to OS/2 by Dave Yeo <dave_yeo@paralynx.com>
 Antiword was ported to Mac OS X by Ronaldo Nascimento <ronaldo@ronaldo.com>
 Antiword was ported to Amiga by Raffaele Pisapia <rafpis@libero.it>
 Antiword was ported to VMS by Joseph Huber <huber@mppmu.mpg.de>

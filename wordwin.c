@@ -1,6 +1,6 @@
 /*
  * wordwin.c
- * Copyright (C) 2002,2003 A.J. van Os; Released under GPL
+ * Copyright (C) 2002-2004 A.J. van Os; Released under GPL
  *
  * Description:
  * Deal with the WIN internals of a MS Word file
@@ -121,6 +121,7 @@ vGetDocumentData(FILE *pFile, const UCHAR *aucHeader)
 
 	if (!bHasImages ||
 	    tOptions.eConversionType == conversion_text ||
+	    tOptions.eConversionType == conversion_fmt_text ||
 	    tOptions.eConversionType == conversion_xml ||
 	    tOptions.eImageLevel == level_no_images) {
 		/*

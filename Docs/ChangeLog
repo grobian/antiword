@@ -1,11 +1,33 @@
 ****************************************************************************
-* Changes in Antiword from versions 0.22 to 0.35                           *
+* Changes in Antiword from versions 0.22 to 0.36                           *
 ****************************************************************************
+
+Changes 0.36 to 0.36.1
+Bug fixes:
+- Bug removed from file misc.c line 788
+
+Changes 0.35 to 0.36
+--------------------
+Bug fixes:
+- Bug reported by Michael Minn <mail@michaelminn.com> fixed
+New features:
+- The default mapping file is now based on the locale (Unix/Linux) or on
+  the active codepage (DOS)
+- A Word document can now be saved as "formatted" text. That means with things
+  like *bold* to show bold text, /italics/ to show italics and _undeline_ to
+  show underlined text are added to the plain text. Based on patches send by
+  Ofir Reichenberg <ofir@qlusters.com>
+- Improved table parsing. Based on information supplied by Bastien Legras
+  <bastien.legras@nectech.fr> and Alex de Kruijff <freebsd@akruijff.dds.nl>
+- A Word document can now be saved in PDF.
+- First attempt to support PostScript output in the Cyrillic alphabet. Based
+  on work done by Alexander Belyaev <isle@free.kursknet.ru>
+- Better support for the Cyrillic alphabet
 
 Changes 0.34 to 0.35
 --------------------
 Bug fixes:
-- Bug in the use of the environment variable ANTIWORDHOME
+- Fixed the bug in the use of the environment variable ANTIWORDHOME
 New features:
 - The XML/DocBook output is slightly better.
 - Scale view window is closed when the main window is closed. Thanks to Tony

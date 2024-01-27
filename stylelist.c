@@ -1,6 +1,6 @@
 /*
  * stylelist.c
- * Copyright (C) 1998-2003 A.J. van Os; Released under GNU GPL
+ * Copyright (C) 1998-2004 A.J. van Os; Released under GNU GPL
  *
  * Description:
  * Build, read and destroy a list of Word style information
@@ -165,7 +165,7 @@ vConvertListCharacter(UCHAR ucNFC, USHORT usListChar, char *szListChar)
 		break;
 	}
 
-	if (eEncoding == encoding_utf8) {
+	if (eEncoding == encoding_utf_8) {
 		tLen = tUcs2Utf8(usListChar, szListChar, 4);
 		szListChar[tLen] = '\0';
 	} else {
