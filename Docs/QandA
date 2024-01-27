@@ -1,0 +1,44 @@
+Questions and Answers (RISC OS version)
+=======================================
+
+Q1: How do I install AntiWord?
+A1: Copy the application-directory and all the files within it to a
+    suitable directory.
+
+Q2: How do I use AntiWord?
+A2: Double click on a Wordfile, filetype MSWord (&ae6). Or drag and drop
+    a file onto the AntiWord icon on the iconbar.
+
+Q3: How does AntiWord deal with Word macro viruses?
+A3: AntiWord does not run any Word macros because it can not do so.
+    Therefore your Archimedes will not be harmed by such a virus.
+
+Q4: What does the 'Paragraph breaks' option do?
+A4: This option controls the maximum number of characters per line in
+    paragraphs. If your screen is 640 pixels wide (like modes 20 and 27)
+    than 76 is probably best. If your screen is 800 or more pixels wide
+    (like mode 31) than numbers near 94 work best. You can switch this
+    option off in case the (text only) output of AntiWord is intended to
+    be the input of a wordprocessor or DTP program.
+
+Q5: What does the 'Auto filetype' option do?
+A5: When auto filetype is allowed, AntiWord will change the filetype of
+    Wordfiles to MSWord (&ae6)
+
+Q6: When AntiWord uses outline fonts it becomes horribly slow. What can I
+    do about that?
+A6: When AntiWord uses outline fonts it needs a large font cache. A small
+    font cache wil make AntiWord (very) slow. The larger the font cache the
+    better, but usualy 160K or 256K will do.
+
+Q7: What is the purpose of the file 'FontNames' in the Choices directory?
+A7: This file provides a translation tabel from the fontnames as they are
+    found in a Word file to the fontnames as they are known to the RISC OS
+    font-manager.
+    The file 'FontNames' is user-editable to make it suit your collection
+    of fonts. Some examples are provided in the Resources directory.
+
+Q8: What is 'Hidden text'?
+A8: Hidden text is Microsoft speak for text that will or will not be shown
+    on the screen, subject to the users preferences, but such text is never
+    printed.

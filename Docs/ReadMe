@@ -1,0 +1,101 @@
+AntiWord
+========
+
+Version 0.31 (08 Dec 2000)
+--------------------------     
+
+Introduction
+------------
+
+AntiWord is an application to display Microsoft® Word files.
+
+
+Licence
+-------
+
+This program is distributed under the GNU General Public License - see the
+accompanying COPYING file for more details.
+
+
+Problems
+--------
+
+Any bugs found should be reported to the author with full details of how to
+get the problem to occur, but don't *expect* support for a product that you
+have not paid for!
+Please include AntiWord's version number and version date, otherwise you
+make it impossible for the author to help.
+
+
+Thanks To
+---------
+
+Victor B. Wagner <vitus@agropc.msk.su> creator of "catdoc"
+Duncan Simpson <word2x@duncan.telstar.net> creator of "word2x"
+Martin Schwartz <schwartz@cs.tu-berlin.de> creator of "laola" and "elser"
+Caolan McNamara <Caolan.McNamara@ul.ie> creator of "mswordview"
+Andrew Scriven <andy.scriven@research.natpower.co.uk> creator of "OLEdecode"
+Craig Southeren <geoffw@extro.ucc.oz.au> creator of "nenscript"
+Thomas Merz <tm@muc.de> creator of "jpeg2ps"
+Ulrich von Zadow <uzadow@cs.tu-berlin.de> creator of "paintlib"
+
+
+Contibuters
+-----------
+
+ISO-8859-2 support by: Pawel Turnau <uzturnau@cyf-kr.edu.pl>
+Character set mapping by: Dmitry Chernyak
+                          <Dmitry.Chernyak@p998.f983.n5030.z2.fidonet.org>
+
+
+Ports
+-----
+
+Antiword was ported to BeOS by David Feugey <dfeugey@free.fr>
+Antiword was ported to OS/2 by Dave Yeo <dave_yeo@mindlink.bc.ca>
+Yen-Ming Lee <leeym@cae.ce.ntu.edu.tw> is the maintainer of the FreeBSD
+version of antiword.
+
+
+Acknowledgements
+----------------
+
+Microsoft is a registered trademark and Windows is a trademark of Microsoft
+Corporation.
+UNIX is a registered trademark of the X/Open Company, Ltd.
+Linux is a registered trademark of Linus Torvalds.
+Postscript is a trademark of Adobe Systems Incorporated.
+All other trademarks are acknowledged.
+
+
+Future Versions
+---------------
+
+If you have any comments, bug reports or suggestions for future versions
+don't hesitate to write to me.
+New versions of the program will only be available if sufficient people
+are using this program. So let me know!
+
+
+The most recent version
+-----------------------
+
+The most recent version of AntiWord can be found on the authors website:
+==>>  http://www.winfield.demon.nl/index.html  <<==
+or you might try:
+==>>  http://www.antiword.org/  <<==
+
+
+The author
+----------
+
+s-mail:
+A.J. van Os,
+Claus Sluterweg 35,
+NL-2012 WN  Haarlem,
+The Netherlands.
+
+e-mail:
+antiword@winfield.demon.nl
+or you might try:
+comments@antiword.org

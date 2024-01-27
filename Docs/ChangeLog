@@ -1,0 +1,122 @@
+****************************************************************************
+* Changes in AntiWord between versions 0.22 and 0.31                       *
+****************************************************************************
+
+Changes 0.30-0.31
+-----------------
+Bug fixes:
+- Bug in the "Show hidden (by Word) text" feature fixed
+- Bug reported by David Aspinwall <aspinwall@timesten.com> fixed
+- Bug reported by Robert Steinmetz <rob@steinmetznet.com> fixed
+Old features:
+- The -g and -c options are no longer supported. The -c option was default
+  and is now used automatically (Unix only)
+New features:
+- Ability to show part of the images.
+- Ability to use landscape mode (Unix only; PostScript version only)
+- Support for all ISO-8859 character sets plus KOI8 and some code pages
+  (Unix only; text version only)
+- Antiword will now give a warning if the given Postscript papersize is
+  unsupported. Thanks to Greg Robinson <Greg.Robinson@dsto.defence.gov.au>
+- Moved from Postscript version 1 to version 2
+- Antiword now returns 1 if no Word document is found among the files given
+  on the command-line. As suggested by Jens Schleusener
+  <Jens.Schleusener@dlr.de>
+- Takes the right margin into account.
+- The PostScript part now supports the AvantGarde, Bookman, Helvetica-Narrow,
+  NewCenturySchlbk and Palatino font (Unix only)
+- More accurate fontnames translation table
+- Initial scale factor is now configurable (RISC OS only)
+
+Changes 0.29-0.30
+-----------------
+Bug fixes:
+- Bug in the generated PostScript (nocurrentpoint) fixed
+- Bug reported by Keith Bamford <kbamford@eurobell.co.uk> fixed
+- Bug in the chapter numbering font fixed
+New features:
+- Improved dealing with changes in the fontsize on a single line.
+- Some support for long filenames (RISC OS only)
+- Thanks to David Kanareck <david@davidkanareck.demon.co.uk> AntiWord can
+  now deal with documents made by "Word for Asian languages". But only
+  when such documents are written in a European language.
+- Character properties "Caps" and "SmallCaps" for accented characters
+- More accurate fontnames translation table (RISC OS only)
+- PostScript part now supports the Times and Helvetica fonts (Unix only)
+
+Changes 0.28-0.29
+-----------------
+Bug fixes:
+- Bug reported by Paul McCann <P.J.McCann@cfm1220.x400.icl.co.uk> fixed
+- Character property "SmallCaps" works better now
+- Bug reported by Richard Lambley <richard@wireless.demon.co.uk> fixed
+- Fixed a bug in the linewidth computation (Unix only)
+New features:
+- A Wordfile can now be saved as PostScript (Unix only, Courier font only)
+- Left, Center, Right and Justify alignment added for Word97
+- Supports de Macintosh characterset
+
+Changes 0.27-0.28
+-----------------
+Licence:
+- Distributed under the GNU General Public License
+Bug fixes:
+- Bug reported by Richard Lambley <richard@wireless.demon.co.uk> has not
+  been fixed yet
+- Deals correctly with fancy quotes in files from a Macintosh
+New features:
+- Supports character properties "SmallCaps", "Caps" and "Hidden Text"
+- The use of fonts and fontsizes for "fast saved" documents is now supported
+- Separators between the text, the footnotes and the endnotes
+- Footnotes are now numbered in arabic numericals (1,2,3), endnotes are now
+  numbered in roman numericals (i,ii,iii)
+
+Changes 0.26-0.27
+-----------------
+Bug fixes:
+- The main title now shows the first 12 characters of the filename
+New features:
+- "Fast saved" documents are now supported for Word 97
+- All tables are now supported for Word 97
+- It is now possible to scale the text
+
+Changes 0.25-0.26
+-----------------
+Bug fixes:
+- Fixed several problems with the Choices file
+- Closed a small memory leak
+New features:
+- The use of fonts and fontsizes for "full saved" documents is now supported
+- Most tables are now supported for Word 97
+- Header numbers are now supported for Word 97
+
+Changes 0.24-0.25
+-----------------
+Bug fixes:
+- Improved handling of memory shortages
+- Some special tables were messed up
+New features:
+- "Fast saved" documents are now supported for Word 6 and 7
+- A new option to permit AntiWord to change the filetype of Wordfiles to
+  MSWord (&ae6)
+- A Wordfile can now be saved as a Drawfile
+- The look-and-feel has been changed from editor-like to browser-like
+
+Changes 0.23-0.24
+-----------------
+Bug fixes:
+- Empty paragraphs in numbered list were not always numbered correctly
+- In very complex tables some text could get lost
+New features:
+- F3 is now a shortcut to the "Save as" dialogue box
+- Left, Center, Right and Justify alignment added for Word 6 and 7
+- [pic] marks the place where a picture should have been
+- The is now possible to have a writeable Choices file, even when AntiWord
+  itself is on a read-only medium
+
+Changes 0.22-0.23
+-----------------
+New features:
+- Paragraph breaks are now an option
+- Bulleted single level lists for files from Word 6 and 7
+- Numbered single level lists (some styles) for files from Word 6 and 7

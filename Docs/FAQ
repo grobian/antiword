@@ -1,0 +1,54 @@
+Frequently Asked Questions (Unix version)
+=========================================
+
+Q1: How do I install antiword?
+A1: (a) Make a suitable directory like '$HOME/src/antiword' and copy the
+        'antiword.tar.gz' file to this directory.
+    (b) decompress: 'gunzip antiword.tar.gz'
+    (c) unpack: 'tar xvf antiword.tar'
+    (d) compile: 'make all'
+    (e) install: 'make install'. This will install antiword in the $HOME/bin
+        directory.
+    (f) copy one or more mapping files from the Resources directory to the
+        $HOME/.antiword directory (note the dot before antiword!).
+
+Q2: How do I use antiword?
+A2: Type antiword -h and see.
+
+Q3: How does antiword deal with Word macro viruses?
+A3: Antiword does not run any Word macros because it can not do so.
+    Therefore your computer system will not be harmed by such a virus.
+
+Q4: What is the purpose of the file 'fontnames' in the '$HOME/.antiword'
+    directory?
+A4: This file provides a translation tabel from the fontnames as they are
+    found in a Word file to the fontnames as they are known to a Postscript
+    printer.
+    The file 'fontnames' is user-editable to make it suit the collection
+    of fonts on your Postscript printer.
+
+Q5: What is 'Hidden text'?
+A5: Hidden text is Microsoft speak for text that will or will not be shown
+    on the screen, subject to the users preferences, but such text is never
+    printed.
+
+Q6: Antiword claims to support all ISO-8859 character sets, but I can't see
+    any of this.
+A6: There is support for all ISO-8859 character sets, but only in the text
+    output, not in the PostScript output.
+    The result can only be seen if your xterm, vtterm, kvt or similair
+    terminal emulation program uses a font compatible with that ISO-8859
+    character set.
+
+Q7: What is the right mapping file (-m option) in my situation?
+A7: The correct mapping file depends on the character set you need for a
+    specific language.
+    For languages from Western Europe (English, French, German) that will be
+    mapping file 8859-1.txt.
+    For languages from Eastern Europe (Polish, Czech, Slovak, Croatian) that
+    will be mapping file 8859-2.txt. (When working under OS/2 you might also
+    try mapping file cp1250.txt)
+    For Esperanto that will be mapping file 8859-3.txt.
+    For Russian that will be mapping file 8859-5.txt or koi8-r.txt. (When
+    working under OS/2 you might also try mapping file cp1251.txt)
+    For Hebrew that will be mapping file 8859-8.txt.

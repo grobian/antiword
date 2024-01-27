@@ -1,0 +1,41 @@
+History of AntiWord by © Adri van Os
+------------------------------------
+
+
+The Name
+--------
+The name comes from: "The antidote against people who send Microsoft® Word
+files to everybody, because they believe that everybody runs Windows® and
+therefore runs Word".
+
+
+Version 0.31 (08 Dec 2000)
+--------------------------
+Early beta release, for evaluation by the public.
+
+
+Known Limitations
+-----------------
+
+1) The layout of Word files is kept "secret" by Microsoft®. Therefore
+   AntiWord is based on information gathered from the Internet and on
+   guesswork.
+2) AntiWord doesn't show all the pictures included in the Wordfile.
+3) AntiWords can not deal with very large files. The current maximum size
+   of an inputfile is about 7 MB.
+4) AntiWord doesn't do any hyphenation. It doesn't because hyphenation is
+   language dependant.
+5) AntiWord doesn't try to emulate any of Words DTP abilities.
+6) The error messages from AntiWord are not very helpful.
+
+
+Known Bugs
+----------
+
+1) AntiWord can not handle encrypted documents.
+2) AntiWord assumes default tabstops.
+3) AntiWord doesn't handle sections, styles, frames.
+4) AntiWord ignores pages headers and footers.
+5) AntiWord adds numbers to all the headers instead of selectively.
+6) AntiWord only handles lists in some of the styles in Word 6 and Word 7
+   and does not handle lists at all in Word 97 and 2000.

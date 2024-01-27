@@ -1,0 +1,51 @@
+#
+# Makefile for !AntiWord (RISC OS version)
+#
+
+CC	= cc
+LD	= link
+TOUCH	= stamp
+
+# must equal to DEBUG or NDEBUG
+DB = NDEBUG
+
+OPTIONS	= -throwback
+#LDFLAGS = -d
+LDLIBS	= C:o.stubs C:o.RISC_OSLib
+
+CFLAGS	= -D__riscos -D$(DB)
+#CFLAGS	= -g -D__riscos -D$(DB)
+
+OBJS1	= o.main_r\
+	o.blocklist o.chartrans o.datalist o.dib2sprt o.depot o.draw o.fail\
+	o.finddata o.findtext o.fontlist o.fonts o.fonts_r o.icons\
+	o.imgexam o.imgtrans o.jpeg2sprt o.misc o.notes o.options\
+	o.out2window o.paragraph o.pictlist o.png2sprt o.rowlist o.stylelist\
+	o.saveas o.tabstop o.word2text o.wordlib o.xmalloc
+
+OBJS2	= o.startup\
+	o.fail
+
+IMAGE1	= @.!AntiWord
+IMAGE2	= @.!RunImage
+
+All:		AntiWord Startup
+
+AntiWord:	$(IMAGE1)
+	@	time
+
+$(IMAGE1):	$(OBJS1)
+		$(LD) $(LDFLAGS) $(OBJS1) $(LDLIBS) -o $@
+	@	$(TOUCH) $@
+
+Startup:	$(IMAGE2)
+	@	time
+
+$(IMAGE2):	$(OBJS2)
+		$(LD) $(LDFLAGS) $(OBJS2) $(LDLIBS) -o $@
+	@	$(TOUCH) $@
+
+.c.o:
+		$(CC) $(CFLAGS) $(OPTIONS) -c c.$*
+
+o.main_r:	h.version

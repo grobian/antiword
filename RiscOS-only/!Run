@@ -1,0 +1,26 @@
+| !Run file for AntiWord
+| (C) Adri van Os 1998,1999
+|
+if "<System$Path>" = "" then Error 0 System resources cannot be found
+if "<Font$Path>" = "" then Error 0 There are no fonts available
+|
+Set      AntiWord$Dir  <Obey$Dir>
+IconSprites <AntiWord$Dir>.!Sprites
+|
+SetMacro AntiWord$Path Choices:AntiWord.,<AntiWord$Dir>.,<Wimp$ScrapDir>.AntiWord.
+|
+SetMacro AntiWord$ChoicesFile AntiWord:Choices
+if "<Choices$Write>" <> "" then Set AntiWord$ChoicesSave <Choices$Write>.AntiWord.Choices else Set AntiWord$ChoicesSave <AntiWord$Dir>.Choices
+|
+SetMacro AntiWord$FontNamesFile AntiWord:FontNames
+if "<Choices$Write>" <> "" then Set AntiWord$FontNamesSave <Choices$Write>.AntiWord.FontNames else Set AntiWord$FontNamesSave <AntiWord$Dir>.FontNames
+|
+Set AntiWord$MappingFile <AntiWord$Dir>.Resources.Unicode
+|
+RMEnsure SharedCLibrary 0.00 RMLoad System:Modules.Clib
+RMEnsure SharedCLibrary 3.75 Error You need Clib 3.75 or later
+|
+if "<File$Type_AE6>" = "" then Set File$Type_AE6 MSWord
+|
+WimpSlot -min 192K -max 192K
+Run <AntiWord$Dir>.!RunImage %*0
