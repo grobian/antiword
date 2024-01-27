@@ -19,8 +19,10 @@ then
 else
 	tmp_dir="/tmp"
 fi                        
-out_file=$tmp_dir"/antiword.$$.ps"
-err_file=$tmp_dir"/antiword.$$.err"
+out_file=`tempfile -d $tmp_dir` || { echo "$0: Cannot create temporary file" >&2; exit 1;  }
+err_file=`tempfile -d $tmp_dir` || { echo "$0: Cannot create temporary file" >&2; exit 1;  }
+# Clean up
+trap " /bin/rm -f -- \"$out_file\" \"$err_file\"" 0 1 2 3 13 15
 
 # Determine the paper size
 paper_size=$1
@@ -30,13 +32,10 @@ shift
 antiword -p $paper_size -i 0 "$@" 2>$err_file >$out_file
 if [ $? -ne 0 ]
 then
-	rm -f $out_file
 	exit 1
 fi
 
 # Show the PostScript file
 gv $out_file -nocentre -media $paper_size
 
-# Clean up
-rm -f $out_file $err_file
 exit 0
