@@ -14,6 +14,10 @@
  */
 
 #include <stdio.h>
+#if defined(DEBUG)
+#include <stdlib.h>
+#include <unistd.h>
+#endif /* DEBUG */
 #include "antiword.h"
 
 
@@ -447,19 +451,22 @@ vDecodeDIB(FILE *pInFile, FILE *pOutFile, const imagedata_type *pImg)
 static void
 vCopy2File(FILE *pInFile, ULONG ulFileOffset, size_t tPictureLen)
 {
-	static int	iPicCounter = 0;
 	FILE	*pOutFile;
 	size_t	tIndex;
-	int	iTmp;
-	char	szFilename[30];
+	int	iTmp, iFd;
+	char	szFilename[] = "/tmp/antiword_XXXXXX.bmp";
 
 	if (!bSetDataOffset(pInFile, ulFileOffset)) {
 		return;
 	}
 
-	sprintf(szFilename, "/tmp/pic/pic%04d.bmp", ++iPicCounter);
-	pOutFile = fopen(szFilename, "wb");
+	iFd = mkstemps(szFilename, 4);
+	if (iFd < 0) {
+		return;
+	}
+	pOutFile = fdopen(iFd, "wb");
 	if (pOutFile == NULL) {
+		close(iFd);
 		return;
 	}
 	/* Turn a dib into a bmp by adding a fake 14 byte header */

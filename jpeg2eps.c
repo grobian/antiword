@@ -8,11 +8,11 @@
  */
 
 #include <stdio.h>
-#include "antiword.h"
-
 #if defined(DEBUG)
-static int	iPicCounter = 0;
+#include <stdlib.h>
+#include <unistd.h>
 #endif /* DEBUG */
+#include "antiword.h"
 
 
 #if defined(DEBUG)
@@ -24,16 +24,20 @@ vCopy2File(FILE *pFile, ULONG ulFileOffset, size_t tPictureLen)
 {
 	FILE	*pOutFile;
 	size_t	tIndex;
-	int	iTmp;
-	char	szFilename[30];
+	int	iTmp, iFd;
+	char	szFilename[] = "/tmp/antiword_XXXXXX.jpg";
 
 	if (!bSetDataOffset(pFile, ulFileOffset)) {
 		return;
 	}
 
-	sprintf(szFilename, "/tmp/pic/pic%04d.jpg", ++iPicCounter);
-	pOutFile = fopen(szFilename, "wb");
+	iFd = mkstemps(szFilename, 4);
+	if (iFd < 0) {
+		return;
+	}
+	pOutFile = fdopen(iFd, "wb");
 	if (pOutFile == NULL) {
+		close(iFd);
 		return;
 	}
 	for (tIndex = 0; tIndex < tPictureLen; tIndex++) {

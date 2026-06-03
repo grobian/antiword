@@ -16,7 +16,7 @@ OPT	= -O2
 
 LDLIBS	=
 
-CFLAGS	= -Wall -pedantic $(OPT) -D$(DB)
+CFLAGS	= -Wall -pedantic $(OPT) -D$(DB) $(EXTRACFLAGS)
 LDFLAGS	=
 
 OBJS	=\
@@ -36,8 +36,11 @@ PROGS =\
 LOCAL_INSTALL_DIR = $(HOME)/bin
 LOCAL_RESOURCES_DIR = $(HOME)/.antiword
 
-GLOBAL_INSTALL_DIR = /usr/bin
-GLOBAL_RESOURCES_DIR = /usr/share/antiword
+PREFIX = /usr
+GLOBAL_INSTALL_DIR = $(PREFIX)/bin
+GLOBAL_RESOURCES_DIR = $(PREFIX)/share/antiword
+
+EXTRACFLAGS = -DGLOBAL_ANTIWORD_DIR='"$(GLOBAL_RESOURCES_DIR)"'
 
 all:		$(PROGS)
 

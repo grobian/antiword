@@ -219,12 +219,16 @@
 #define GLOBAL_ANTIWORD_DIR	"/sys/lib/antiword"
 #define ANTIWORD_DIR		"lib/antiword"
 #define FONTNAMES_FILE		"fontnames"
-#elif defined(__sun__)
+#elif defined(__sun__) || defined(__APPLE__)
+#if !defined(GLOBAL_ANTIWORD_DIR)
 #define GLOBAL_ANTIWORD_DIR	"/usr/local/share/antiword"
+#endif
 #define ANTIWORD_DIR		".antiword"
 #define FONTNAMES_FILE		"fontnames"
 #else	/* All others */
+#if !defined(GLOBAL_ANTIWORD_DIR)
 #define GLOBAL_ANTIWORD_DIR	"/usr/share/antiword"
+#endif
 #define ANTIWORD_DIR		".antiword"
 #define FONTNAMES_FILE		"fontnames"
 #endif /* __dos */
